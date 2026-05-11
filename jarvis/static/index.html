@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jarvis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-1: #030308;
+      --bg-2: #0a0e1a;
+      --bg-3: #050511;
+      --fg: #f5f7fa;
+      --muted: #5b6478;
+      --dim: #2a3042;
+      --idle: #5b6478;
+      --listen: #22d3ee;
+      --listen-glow: rgba(34, 211, 238, 0.5);
+      --think: #c084fc;
+      --think-glow: rgba(192, 132, 252, 0.5);
+      --speak: #fbbf24;
+      --speak-glow: rgba(251, 191, 36, 0.5);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      width: 100%;
+      background: radial-gradient(ellipse at 50% 30%, var(--bg-2) 0%, var(--bg-1) 55%, var(--bg-3) 100%);
+      color: var(--fg);
+      font-family: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      overflow: hidden;
+      letter-spacing: 0.01em;
+    }
+    /* Animated starfield */
+    .stars {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 0;
+    }
+    .star {
+      position: absolute;
+      width: 2px;
+      height: 2px;
+      background: #fff;
+      border-radius: 50%;
+      opacity: 0;
+      animation: twinkle linear infinite;
+    }
+    @keyframes twinkle {
+      0%, 100% { opacity: 0; transform: scale(0.5); }
+      50% { opacity: 0.6; transform: scale(1); }
+    }
+    /* Subtle ambient gradient flares */
+    .flare {
+      position: fixed;
+      pointer-events: none;
+      filter: blur(80px);
+      opacity: 0.25;
+      z-index: 0;
+      transition: background 1.2s ease;
+    }
+    .flare.tl { top: -10%; left: -10%; width: 60vw; height: 60vh; background: radial-gradient(circle, var(--idle), transparent 60%); }
+    .flare.br { bottom: -10%; right: -10%; width: 60vw; height: 60vh; background: radial-gradient(circle, var(--idle), transparent 60%); }
+    body[data-state="listening"] .flare.tl { background: radial-gradient(circle, var(--listen), transparent 60%); }
+    body[data-state="listening"] .flare.br { background: radial-gradient(circle, var(--listen), transparent 60%); }
+    body[data-state="thinking"] .flare.tl { background: radial-gradient(circle, var(--think), transparent 60%); }
+    body[data-state="thinking"] .flare.br { background: radial-gradient(circle, var(--think), transparent 60%); }
+    body[data-state="speaking"] .flare.tl { background: radial-gradient(circle, var(--speak), transparent 60%); }
+    body[data-state="speaking"] .flare.br { background: radial-gradient(circle, var(--speak), transparent 60%); }
+    /* Layout */
+    .scene {
+      position: relative;
+      z-index: 1;
+      width: 100vw;
+      height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      padding: 32px 48px;
+      gap: 24px;
+    }
+    /* Top bar */
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+      color: var(--fg);
+    }
+    .brand .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--idle);
+      box-shadow: 0 0 12px currentColor;
+      animation: dotpulse 2s ease-in-out infinite;
+    }
+    body[data-state="listening"] .brand .dot { background: var(--listen); color: var(--listen); animation-duration: 1s; }
+    body[data-state="thinking"] .brand .dot { background: var(--think); color: var(--think); animation-duration: 0.8s; }
+    body[data-state="speaking"] .brand .dot { background: var(--speak); color: var(--speak); animation-duration: 0.6s; }
+    @keyframes dotpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .clock {
+      font-family: "JetBrains Mono", monospace;
+      letter-spacing: 0.16em;
+      color: var(--muted);
+    }
+    .state-badge {
+      padding: 6px 14px;
+      border: 1px solid var(--dim);
+      border-radius: 999px;
+      letter-spacing: 0.2em;
+      transition: border-color 400ms ease, color 400ms ease;
+    }
+    body[data-state="listening"] .state-badge { border-color: var(--listen); color: var(--listen); }
+    body[data-state="thinking"] .state-badge { border-color: var(--think); color: var(--think); }
+    body[data-state="speaking"] .state-badge { border-color: var(--speak); color: var(--speak); }
+    /* Centerpiece */
+    .center {
+      grid-row: 2;
+      display: grid;
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr auto;
+      align-items: center;
+      justify-items: center;
+      gap: 32px;
+    }
+    .stage-wrap {
+      position: relative;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .stage {
+      position: relative;
+      width: 360px;
+      height: 360px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ring {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 1px solid var(--listen);
+      opacity: 0;
+      pointer-events: none;
+    }
+    body[data-state="listening"] .ring {
+      animation: ripple 2.6s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+    }
+    body[data-state="listening"] .ring:nth-child(2) { animation-delay: 0.7s; }
+    body[data-state="listening"] .ring:nth-child(3) { animation-delay: 1.4s; }
+    @keyframes ripple {
+      0% { transform: scale(0.6); opacity: 0.7; border-width: 2px; }
+      100% { transform: scale(1.8); opacity: 0; border-width: 0.5px; }
+    }
+    .orb {
+      position: relative;
+      width: 240px;
+      height: 240px;
+      border-radius: 50%;
+      transition: background 800ms ease, box-shadow 800ms ease;
+    }
+    /* Layered glow halos */
+    .orb::before, .orb::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .orb::before {
+      inset: -40px;
+      background: radial-gradient(circle, currentColor 0%, transparent 60%);
+      opacity: 0.25;
+      filter: blur(20px);
+      animation: halo-breathe 5s ease-in-out infinite;
+    }
+    .orb::after {
+      inset: 18%;
+      background: radial-gradient(circle at 38% 32%, rgba(255,255,255,0.25), transparent 55%);
+      opacity: 0.7;
+    }
+    @keyframes halo-breathe {
+      0%, 100% { transform: scale(1); opacity: 0.25; }
+      50% { transform: scale(1.15); opacity: 0.4; }
+    }
+    /* Idle */
+    body[data-state="idle"] .orb {
+      color: var(--idle);
+      background:
+        radial-gradient(circle at 35% 28%, #4a5568 0%, #1a1f2e 60%, #0a0e1a 100%);
+      box-shadow:
+        0 0 60px rgba(91, 100, 120, 0.15),
+        inset 0 -20px 60px rgba(0, 0, 0, 0.6),
+        inset 0 20px 40px rgba(255, 255, 255, 0.04);
+      animation: orb-breathe 5s ease-in-out infinite;
+    }
+    @keyframes orb-breathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.025); }
+    }
+    /* Listening */
+    body[data-state="listening"] .orb {
+      color: var(--listen);
+      background:
+        radial-gradient(circle at 35% 28%, #67e8f9 0%, #0891b2 50%, #155e75 90%);
+      box-shadow:
+        0 0 80px var(--listen-glow),
+        0 0 140px rgba(34, 211, 238, 0.25),
+        inset 0 -20px 60px rgba(0, 0, 0, 0.4),
+        inset 0 20px 50px rgba(255, 255, 255, 0.15);
+      animation: orb-listen 1.4s ease-in-out infinite;
+    }
+    @keyframes orb-listen {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.08); }
+    }
+    /* Thinking */
+    body[data-state="thinking"] .orb {
+      color: var(--think);
+      background: conic-gradient(
+        from 0deg,
+        #c084fc 0deg,
+        #6366f1 90deg,
+        #ec4899 180deg,
+        #c084fc 270deg,
+        #c084fc 360deg
+      );
+      box-shadow:
+        0 0 90px var(--think-glow),
+        0 0 160px rgba(192, 132, 252, 0.3),
+        inset 0 0 40px rgba(0, 0, 0, 0.3);
+      animation: orb-think 2.4s linear infinite;
+    }
+    @keyframes orb-think {
+      from { transform: rotate(0deg) scale(1); }
+      50%  { transform: rotate(180deg) scale(1.04); }
+      to   { transform: rotate(360deg) scale(1); }
+    }
+    /* Speaking */
+    body[data-state="speaking"] .orb {
+      color: var(--speak);
+      background:
+        radial-gradient(circle at 35% 28%, #fde68a 0%, #f59e0b 50%, #b45309 90%);
+      box-shadow:
+        0 0 100px var(--speak-glow),
+        0 0 180px rgba(251, 191, 36, 0.3),
+        inset 0 -20px 60px rgba(120, 53, 15, 0.5),
+        inset 0 20px 50px rgba(255, 255, 255, 0.2);
+      animation: orb-speak 0.9s ease-in-out infinite;
+    }
+    @keyframes orb-speak {
+      0%, 100% { transform: scale(1); }
+      30% { transform: scale(1.06); }
+      55% { transform: scale(0.98); }
+      80% { transform: scale(1.03); }
+    }
+    /* Audio-reactive bars (visible during speak) */
+    .bars {
+      display: flex;
+      gap: 4px;
+      align-items: end;
+      justify-content: center;
+      height: 32px;
+      margin-top: 28px;
+      opacity: 0;
+      transition: opacity 400ms ease;
+    }
+    body[data-state="speaking"] .bars { opacity: 1; }
+    .bar {
+      width: 4px;
+      background: var(--speak);
+      border-radius: 2px;
+      box-shadow: 0 0 8px var(--speak-glow);
+      animation: bar-bounce 0.8s ease-in-out infinite;
+    }
+    .bar:nth-child(1) { animation-delay: 0.0s; height: 12px; }
+    .bar:nth-child(2) { animation-delay: 0.1s; height: 24px; }
+    .bar:nth-child(3) { animation-delay: 0.2s; height: 18px; }
+    .bar:nth-child(4) { animation-delay: 0.3s; height: 28px; }
+    .bar:nth-child(5) { animation-delay: 0.4s; height: 14px; }
+    .bar:nth-child(6) { animation-delay: 0.5s; height: 22px; }
+    .bar:nth-child(7) { animation-delay: 0.6s; height: 16px; }
+    .bar:nth-child(8) { animation-delay: 0.7s; height: 26px; }
+    .bar:nth-child(9) { animation-delay: 0.6s; height: 18px; }
+    .bar:nth-child(10) { animation-delay: 0.5s; height: 12px; }
+    .bar:nth-child(11) { animation-delay: 0.4s; height: 22px; }
+    .bar:nth-child(12) { animation-delay: 0.3s; height: 16px; }
+    @keyframes bar-bounce {
+      0%, 100% { transform: scaleY(0.4); }
+      50% { transform: scaleY(1); }
+    }
+    /* Bottom text */
+    .text-pane {
+      grid-row: 3;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      padding: 24px 0 8px;
+      max-width: 760px;
+      margin: 0 auto;
+      width: 100%;
+      text-align: center;
+    }
+    .label {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .body {
+      font-size: 19px;
+      font-weight: 400;
+      line-height: 1.55;
+      letter-spacing: 0.005em;
+      color: rgba(245, 247, 250, 0.95);
+      white-space: pre-wrap;
+      min-height: 120px;
+      transition: opacity 300ms ease;
+    }
+    /* History (older turns above current) */
+    .history {
+      position: fixed;
+      bottom: 240px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 760px;
+      width: calc(100% - 96px);
+      pointer-events: none;
+    }
+    .history-item {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--muted);
+      margin-bottom: 6px;
+      text-align: center;
+      opacity: 0;
+      transition: opacity 600ms ease;
+    }
+    .history-item.visible { opacity: 0.45; }
+    .history-item.you::before {
+      content: "you · ";
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      color: var(--listen);
+      text-transform: uppercase;
+      opacity: 0.8;
+    }
+    .history-item.jarvis::before {
+      content: "jarvis · ";
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      color: var(--speak);
+      text-transform: uppercase;
+      opacity: 0.8;
+    }
+    @media (max-width: 760px) {
+      .scene { padding: 20px; }
+      .stage { width: 280px; height: 280px; }
+      .orb { width: 180px; height: 180px; }
+      .body { font-size: 16px; }
+    }
+  </style>
+</head>
+<body data-state="idle">
+  <div class="stars" id="stars"></div>
+  <div class="flare tl"></div>
+  <div class="flare br"></div>
+
+  <div class="scene">
+    <div class="topbar">
+      <span class="brand"><span class="dot"></span>JARVIS</span>
+      <span class="clock" id="clock"></span>
+      <span class="state-badge" id="state">idle</span>
+    </div>
+
+    <div class="center">
+      <div class="stage-wrap">
+        <div class="stage">
+          <div class="ring"></div>
+          <div class="ring"></div>
+          <div class="ring"></div>
+          <div class="orb"></div>
+        </div>
+      </div>
+      <div class="bars">
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      </div>
+    </div>
+
+    <div class="text-pane">
+      <span class="label" id="label">stand by</span>
+      <div class="body" id="body"></div>
+    </div>
+  </div>
+
+  <div class="history" id="history"></div>
+
+  <script>
+    // Starfield
+    (function makeStars() {
+      const container = document.getElementById("stars");
+      for (let i = 0; i < 80; i++) {
+        const s = document.createElement("div");
+        s.className = "star";
+        s.style.left = Math.random() * 100 + "%";
+        s.style.top = Math.random() * 100 + "%";
+        const dur = 3 + Math.random() * 6;
+        s.style.animationDuration = dur + "s";
+        s.style.animationDelay = -(Math.random() * dur) + "s";
+        const size = 1 + Math.random() * 2.5;
+        s.style.width = size + "px";
+        s.style.height = size + "px";
+        container.appendChild(s);
+      }
+    })();
+
+    // Clock
+    function tick() {
+      const d = new Date();
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      const ss = String(d.getSeconds()).padStart(2, "0");
+      document.getElementById("clock").textContent = hh + ":" + mm + ":" + ss;
+    }
+    tick();
+    setInterval(tick, 1000);
+
+    // SSE
+    const stateEl = document.getElementById("state");
+    const labelEl = document.getElementById("label");
+    const bodyEl = document.getElementById("body");
+    const historyEl = document.getElementById("history");
+
+    const labels = {
+      idle: "stand by",
+      listening: "listening · speak now",
+      thinking: "thinking",
+      speaking: "speaking",
+    };
+
+    let lastUserText = null;
+    let lastJarvisText = null;
+    let currentState = "idle";
+
+    function pushHistory(role, text) {
+      if (!text) return;
+      const item = document.createElement("div");
+      item.className = "history-item " + role;
+      item.textContent = text.length > 120 ? text.slice(0, 117) + "…" : text;
+      historyEl.insertBefore(item, historyEl.firstChild);
+      requestAnimationFrame(() => item.classList.add("visible"));
+      // Cap at 4 items
+      while (historyEl.children.length > 4) {
+        historyEl.removeChild(historyEl.lastChild);
+      }
+    }
+
+    function update(data) {
+      const prev = currentState;
+      currentState = data.state;
+      document.body.dataset.state = data.state;
+      stateEl.textContent = data.state;
+      labelEl.textContent = labels[data.state] || data.state;
+
+      // Snapshot transitions to history
+      if (prev === "thinking" && data.state !== "thinking" && lastUserText) {
+        pushHistory("you", lastUserText);
+        lastUserText = null;
+      }
+      if (prev === "speaking" && data.state !== "speaking" && lastJarvisText) {
+        pushHistory("jarvis", lastJarvisText);
+        lastJarvisText = null;
+      }
+
+      // Track current
+      if (data.state === "thinking") lastUserText = data.text;
+      if (data.state === "speaking") lastJarvisText = data.text;
+
+      // Body fade
+      bodyEl.style.opacity = "0";
+      setTimeout(() => {
+        bodyEl.textContent = data.text || "";
+        bodyEl.style.opacity = "1";
+      }, 200);
+    }
+
+    const evt = new EventSource("/events");
+    evt.onmessage = (e) => {
+      try {
+        update(JSON.parse(e.data));
+      } catch (_) {}
+    };
+    evt.onerror = () => {
+      stateEl.textContent = "disconnected";
+    };
+  </script>
+</body>
+</html>
