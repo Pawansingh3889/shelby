@@ -457,6 +457,45 @@
         opacity: 0;
       }
     }
+    /* "Doing" pill: which tool Shelby is currently running during thinking
+       state. Appears below the orb, fades in/out as tool_use blocks fire.
+       Pulsing dot reinforces that it's live, not a frozen label. */
+    .doing-pill {
+      position: relative;
+      margin-top: 18px;
+      padding: 8px 18px;
+      background: rgba(192, 132, 252, 0.06);
+      border: 1px solid var(--think);
+      border-radius: 999px;
+      color: var(--think);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity 240ms ease, transform 240ms ease;
+      pointer-events: none;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 0 24px rgba(192, 132, 252, 0.18);
+    }
+    .doing-pill.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .doing-pill::before {
+      content: "";
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--think);
+      box-shadow: 0 0 8px var(--think-glow);
+      animation: dotpulse 0.9s ease-in-out infinite;
+    }
     /* Audio-reactive bars (visible during speak) */
     .bars {
       display: flex;
@@ -608,6 +647,7 @@
           </div>
         </div>
       </div>
+      <div class="doing-pill" id="doing-pill"></div>
       <div class="bars">
         <div class="bar"></div><div class="bar"></div><div class="bar"></div>
         <div class="bar"></div><div class="bar"></div><div class="bar"></div>
@@ -691,6 +731,16 @@
     const labelEl = document.getElementById("label");
     const bodyEl = document.getElementById("body");
     const historyEl = document.getElementById("history");
+    const doingPill = document.getElementById("doing-pill");
+
+    function setDoing(label) {
+      if (label && currentState === "thinking") {
+        doingPill.textContent = label;
+        doingPill.classList.add("visible");
+      } else {
+        doingPill.classList.remove("visible");
+      }
+    }
 
     const labels = {
       idle: "stand by",
@@ -853,6 +903,14 @@
       document.body.dataset.state = data.state;
       stateEl.textContent = data.state;
       labelEl.textContent = labels[data.state] || data.state;
+
+      // Tool-call status pill: shows "Checking weather…" etc as each tool
+      // fires during thinking. Hidden whenever state leaves thinking.
+      if (data.state === "thinking") {
+        setDoing(data.doing || "");
+      } else {
+        setDoing("");
+      }
 
       if (prev === "thinking" && data.state !== "thinking" && lastUserText) {
         pushHistory("you", lastUserText);
