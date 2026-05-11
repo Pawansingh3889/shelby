@@ -612,6 +612,30 @@
       text-transform: uppercase;
       opacity: 0.8;
     }
+    /* Rotating HUD rings around the orb: three concentric SVG layers
+       at different sizes, dash patterns and speeds, plus four cardinal
+       tick marks. Recolours with active state via currentColor. */
+    .hud-ring {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      color: var(--idle);
+      pointer-events: none;
+      opacity: 0.45;
+      transition: opacity 700ms ease, color 800ms ease;
+    }
+    body[data-state="idle"]      .hud-ring { color: var(--muted); opacity: 0.32; }
+    body[data-state="listening"] .hud-ring { color: var(--listen); opacity: 0.78; }
+    body[data-state="thinking"]  .hud-ring { color: var(--think);  opacity: 0.78; }
+    body[data-state="speaking"]  .hud-ring { color: var(--speak);  opacity: 0.78; }
+    .hud-ring-outer { animation: hud-spin 38s linear infinite; }
+    .hud-ring-mid   { animation: hud-spin 22s linear infinite reverse; }
+    .hud-ring-inner { animation: hud-spin 14s linear infinite; }
+    @keyframes hud-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
     /* HUD: viewport corner brackets, frame the screen as a tactical HUD.
        Thin L-shape brackets recolour to match the active state. */
     .hud-corner {
@@ -742,6 +766,26 @@
           <div class="ring"></div>
           <div class="ring"></div>
           <div class="ring"></div>
+          <svg class="hud-ring hud-ring-outer" viewBox="0 0 360 360" aria-hidden="true">
+            <circle cx="180" cy="180" r="174" fill="none"
+                    stroke="currentColor" stroke-width="0.8"
+                    stroke-dasharray="3 6" stroke-opacity="0.55" />
+          </svg>
+          <svg class="hud-ring hud-ring-mid" viewBox="0 0 360 360" aria-hidden="true">
+            <circle cx="180" cy="180" r="156" fill="none"
+                    stroke="currentColor" stroke-width="0.7"
+                    stroke-dasharray="22 4 3 4" stroke-opacity="0.7" />
+            <!-- Four cardinal tick marks read as a HUD compass -->
+            <line x1="180" y1="0"   x2="180" y2="12"  stroke="currentColor" stroke-width="1.4" stroke-opacity="0.85" />
+            <line x1="180" y1="348" x2="180" y2="360" stroke="currentColor" stroke-width="1.4" stroke-opacity="0.85" />
+            <line x1="0"   y1="180" x2="12"  y2="180" stroke="currentColor" stroke-width="1.4" stroke-opacity="0.85" />
+            <line x1="348" y1="180" x2="360" y2="180" stroke="currentColor" stroke-width="1.4" stroke-opacity="0.85" />
+          </svg>
+          <svg class="hud-ring hud-ring-inner" viewBox="0 0 360 360" aria-hidden="true">
+            <circle cx="180" cy="180" r="138" fill="none"
+                    stroke="currentColor" stroke-width="0.55"
+                    stroke-dasharray="1 3" stroke-opacity="0.6" />
+          </svg>
           <div class="orb"></div>
           <div class="particles">
             <div class="particle"></div><div class="particle"></div>
