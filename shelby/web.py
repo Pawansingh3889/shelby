@@ -32,6 +32,8 @@ def publish(
     append: bool = False,
     doing: Optional[str] = None,
     levels: Optional[list] = None,
+    mode: Optional[str] = None,
+    persona: Optional[str] = None,
 ) -> None:
     payload = {
         "state": state,
@@ -40,6 +42,8 @@ def publish(
         "append": bool(append),
         "doing": doing or "",
         "levels": levels or [],
+        "mode": mode or "",
+        "persona": persona or "",
     }
     global _last_payload
     # Late-joiners shouldn't see append payloads in isolation, so we never

@@ -9,9 +9,10 @@ import webbrowser
 
 import anyio
 import uvicorn
+from typing import Optional
 
 from .ambient import get_wake_model, record_until_silence, wait_for_wake
-from .brain import Brain
+from .brain_hybrid import HybridBrain
 from . import timers
 from .voice import speak_async, strip_markdown_for_speech, transcribe, warmup_stt, warmup_tts
 from .web import app, publish
@@ -89,7 +90,7 @@ def _next_chunk_boundary(buffer: str) -> int:
     return end
 
 
-async def _stream_speak(brain: Brain, prompt: str) -> str:
+async def _stream_speak(brain: HybridBrain, prompt: str) -> str:
     """Stream brain.process_stream into TTS+playback by sentence.
 
     Producer task reads text deltas from the brain stream, accumulates a
@@ -110,12 +111,29 @@ async def _stream_speak(brain: Brain, prompt: str) -> str:
         try:
             async for event in brain.process_stream(prompt):
                 etype = event.get("type") if isinstance(event, dict) else None
+                if etype == "mode":
+                    # HybridBrain emits this when the active brain swaps
+                    # mid-session. Surface the transition to the frontend.
+                    publish(
+                        "thinking",
+                        text=display_prompt,
+                        doing="",
+                        mode=event.get("mode", ""),
+                        persona=event.get("name", ""),
+                    )
+                    continue
                 if etype == "tool":
                     label = _pretty_tool(event.get("name", ""))
                     if label:
                         # Keep the user's transcript visible in `text`; the
                         # frontend shows `doing` as a pill underneath.
-                        publish("thinking", text=display_prompt, doing=label)
+                        publish(
+                            "thinking",
+                            text=display_prompt,
+                            doing=label,
+                            mode=brain.mode,
+                            persona=brain.current.name if brain.current else "",
+                        )
                     continue
                 if etype != "text":
                     continue
@@ -150,6 +168,8 @@ async def _stream_speak(brain: Brain, prompt: str) -> str:
                     words=words,
                     levels=levels,
                     append=not first,
+                    mode=brain.mode,
+                    persona=brain.current.name if brain.current else "",
                 )
 
             try:
@@ -163,13 +183,19 @@ async def _stream_speak(brain: Brain, prompt: str) -> str:
     return " ".join(full_reply).strip()
 
 
-async def _announce_timer(t: timers.Timer) -> None:
+async def _announce_timer(t: timers.Timer, brain: Optional["HybridBrain"] = None) -> None:
     """Speak a fired timer's message. Waits for the audio lock so it never
     overlaps with the current conversation turn."""
     line = f"Captain, your timer is up. {t.message}."
     print(f"[timer {t.id} fired]> {line}", flush=True)
     async with AUDIO_LOCK:
-        publish("speaking", text=line, doing="")
+        publish(
+            "speaking",
+            text=line,
+            doing="",
+            mode=brain.mode if brain else "",
+            persona=brain.current.name if (brain and brain.current) else "",
+        )
         try:
             await speak_async(strip_markdown_for_speech(line))
         except Exception as exc:
@@ -189,17 +215,31 @@ async def _loop() -> None:
     print("[ready, listening for 'hey jarvis']\n", flush=True)
     publish("idle", text="Say 'hey jarvis' to start.")
 
-    # Background timer watcher: polls every second, fires reminders via
-    # _announce_timer which serialises on AUDIO_LOCK against active TTS.
-    timer_task = asyncio.create_task(timers.watch_loop(_announce_timer))
+    async with HybridBrain() as brain:
+        # Background timer watcher: polls every second, fires reminders via
+        # _announce_timer which serialises on AUDIO_LOCK against active TTS.
+        async def _fire(t):
+            await _announce_timer(t, brain)
+        timer_task = asyncio.create_task(timers.watch_loop(_fire))
 
-    async with Brain() as brain:
+        def pub(state: str, **kwargs):
+            """Publish with the current brain's mode + persona auto-attached
+            so the frontend always knows which assistant is talking."""
+            kwargs.setdefault("mode", brain.mode)
+            kwargs.setdefault(
+                "persona", brain.current.name if brain.current else "",
+            )
+            publish(state, **kwargs)
+
+        # Announce the initial mode so the UI can paint the right badge
+        # before the first turn.
+        pub("idle", text="Say 'hey jarvis' to start.")
         try:
             while True:
                 # Run the blocking sync wake/record calls in a thread so the
                 # event loop stays free for the timer watcher.
                 await asyncio.to_thread(wait_for_wake)
-                publish("listening")
+                pub("listening")
                 print("> wake detected, listening...", flush=True)
                 audio = await asyncio.to_thread(record_until_silence)
 
@@ -214,18 +254,18 @@ async def _loop() -> None:
                         break
 
                     print(f"you> {text}", flush=True)
-                    publish("thinking", text=f"“{text}”")
+                    pub("thinking", text=f"“{text}”")
 
                     try:
                         reply = await _stream_speak(brain, text)
                     except Exception as exc:
                         print(f"shelby> [error: {exc}]", flush=True)
-                        publish("idle", text=f"error: {exc}")
+                        pub("idle", text=f"error: {exc}")
                         break
 
                     print(f"shelby> {reply}", flush=True)
 
-                    publish("listening", text="follow-up?")
+                    pub("listening", text="follow-up?")
                     audio = await asyncio.to_thread(
                         record_until_silence, follow_up_window_ms
                     )
@@ -233,7 +273,7 @@ async def _loop() -> None:
                         print("(no follow-up)", flush=True)
                         break
 
-                publish("idle", text="Say 'hey jarvis' to start.")
+                pub("idle", text="Say 'hey jarvis' to start.")
                 print("[listening for 'hey jarvis']\n", flush=True)
         except KeyboardInterrupt:
             publish("idle", text="shutting down")
