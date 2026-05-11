@@ -174,6 +174,7 @@ class Brain:
             ],
             system_prompt=SYSTEM_PROMPT,
             cli_path=cli_path,
+            setting_sources=["user"],
         )
         self._client: Optional[ClaudeSDKClient] = None
 
