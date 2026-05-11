@@ -44,7 +44,7 @@ try:
 except ImportError:  # pragma: no cover
     StreamEvent = None  # type: ignore
 
-from . import timers
+from . import syscontrol, timers
 
 
 GITHUB_USERNAME = os.environ.get("SHELBY_GITHUB_USERNAME", "Pawansingh3889")
@@ -280,6 +280,35 @@ async def cancel_timer(args):
     return {"content": [{"type": "text", "text": "pass timer_id or match"}]}
 
 
+@tool(
+    "open_application",
+    "Launch a desktop application on this computer. Use the friendly app "
+    "name Captain said. Known shortcuts include notepad, calculator, "
+    "explorer, terminal, powershell, chrome, edge, firefox, vscode, "
+    "spotify, discord, slack, obsidian, settings, task manager. Unknown "
+    "names are dispatched via the OS shell, which usually still works.",
+    {"name": str},
+)
+async def open_application(args):
+    name = (args.get("name") or "").strip()
+    ok, msg = syscontrol.open_app(name)
+    return {"content": [{"type": "text", "text": msg}]}
+
+
+@tool(
+    "open_url",
+    "Open a URL in the default browser. Accepts full URLs or bare domains "
+    "like 'github.com'. Only http, https, mailto and tel schemes are "
+    "allowed. Use this when Captain says 'open my GitHub', 'pull up the "
+    "BBC news site', or similar.",
+    {"url": str},
+)
+async def open_url_tool(args):
+    url = (args.get("url") or "").strip()
+    ok, msg = syscontrol.open_url(url)
+    return {"content": [{"type": "text", "text": msg}]}
+
+
 def _detect_system_claude_cli() -> Optional[Path]:
     explicit = os.environ.get("CLAUDE_AGENT_CLI_PATH")
     if explicit:
@@ -360,6 +389,14 @@ SYSTEM_PROMPT = (
     "matching tool rather than guessing. For single-tool questions, skip the acknowledgement "
     "and just answer. Never narrate what you are about to do for trivial replies, just answer.\n"
     "\n"
+    "SYSTEM CONTROL — when Captain says 'open X', 'launch X', 'pull up X':\n"
+    "1. If X is an application (Chrome, notepad, terminal, Spotify, VS Code, "
+    "task manager, etc.), call open_application(name=X).\n"
+    "2. If X is a website or URL (GitHub, BBC, gmail.com, etc.), call "
+    "open_url(url=X). Bare domains work: open_url(url='github.com').\n"
+    "3. Confirm in one short sentence: 'On it Captain.' or 'Opening Chrome.' "
+    "Don't repeat the URL or app name back verbatim.\n"
+    "\n"
     "TIMER INTENT — when Captain says 'remind me in X to Y', 'set a timer for X', "
     "'wake me in X minutes' or similar:\n"
     "1. Convert the spoken duration to seconds. '20 minutes' -> 1200, 'an hour' -> 3600, "
@@ -394,6 +431,7 @@ class Brain:
                 current_time, system_info, weather, forecast,
                 news_headlines, github_pending,
                 set_timer, list_timers, cancel_timer,
+                open_application, open_url_tool,
             ],
         )
         servers = {"shelby": local}
@@ -413,6 +451,8 @@ class Brain:
                 "mcp__shelby__set_timer",
                 "mcp__shelby__list_timers",
                 "mcp__shelby__cancel_timer",
+                "mcp__shelby__open_application",
+                "mcp__shelby__open_url",
                 "mcp__claude_ai_Gmail__search_threads",
                 "mcp__claude_ai_Gmail__get_thread",
                 "mcp__claude_ai_Google_Calendar__list_events",
