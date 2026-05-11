@@ -12,7 +12,7 @@ import uvicorn
 
 from .ambient import get_wake_model, record_until_silence, wait_for_wake
 from .brain import Brain
-from .voice import speak_async, transcribe, warmup_stt
+from .voice import speak_async, transcribe, warmup_stt, warmup_tts
 from .web import app, publish
 
 
@@ -108,6 +108,8 @@ async def _loop() -> None:
     print(f"[serving UI at http://{HOST}:{PORT}]", flush=True)
     print("[warming up speech-to-text]", flush=True)
     warmup_stt()
+    print("[warming up text-to-speech]", flush=True)
+    await warmup_tts()
     print("[loading wake-word model]", flush=True)
     get_wake_model()
     print("[ready, listening for 'hey jarvis']\n", flush=True)
