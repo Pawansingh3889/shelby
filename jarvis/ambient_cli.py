@@ -9,14 +9,14 @@ from .voice import speak_async, transcribe, warmup_stt
 
 async def _loop() -> None:
     print("Shelby ambient mode.")
-    print("  Say 'Computer' to wake. Speak. Pause. Reply will be spoken.")
+    print("  Say 'Hey Jarvis' to wake. Speak. Pause. Reply will be spoken.")
     print("  Ctrl-C to exit.\n")
 
     print("[warming up speech-to-text]", flush=True)
     warmup_stt()
     print("[loading wake-word model]", flush=True)
     get_wake_model()
-    print("[ready, listening for 'computer']\n", flush=True)
+    print("[ready, listening for 'hey jarvis']\n", flush=True)
 
     follow_up_window_ms = int(os.environ.get("JARVIS_FOLLOWUP_MS", "5000"))
 
@@ -54,7 +54,7 @@ async def _loop() -> None:
                         print("(no follow-up)", flush=True)
                         break
 
-                print("[listening for 'computer']\n", flush=True)
+                print("[listening for 'hey jarvis']\n", flush=True)
         except KeyboardInterrupt:
             print("\n[shutting down]")
 

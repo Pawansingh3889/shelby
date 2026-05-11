@@ -32,8 +32,8 @@ async def _loop() -> None:
     warmup_stt()
     print("[loading wake-word model]", flush=True)
     get_wake_model()
-    print("[ready, listening for 'computer']\n", flush=True)
-    publish("idle", text="Say 'computer' to start.")
+    print("[ready, listening for 'hey jarvis']\n", flush=True)
+    publish("idle", text="Say 'hey jarvis' to start.")
 
     async with Brain() as brain:
         try:
@@ -73,8 +73,8 @@ async def _loop() -> None:
                         print("(no follow-up)", flush=True)
                         break
 
-                publish("idle", text="Say 'computer' to start.")
-                print("[listening for 'computer']\n", flush=True)
+                publish("idle", text="Say 'hey jarvis' to start.")
+                print("[listening for 'hey jarvis']\n", flush=True)
         except KeyboardInterrupt:
             publish("idle", text="shutting down")
             print("\n[shutting down]")

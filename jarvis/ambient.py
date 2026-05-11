@@ -15,7 +15,7 @@ SAMPLE_RATE = 16000
 CHANNELS = 1
 DTYPE = "int16"
 
-WAKE_MODEL = os.environ.get("JARVIS_WAKE_MODEL", "computer")
+WAKE_MODEL = os.environ.get("JARVIS_WAKE_MODEL", "hey_jarvis")
 WAKE_THRESHOLD = float(os.environ.get("JARVIS_WAKE_THRESHOLD", "0.5"))
 
 VAD_AGGRESSIVENESS = int(os.environ.get("JARVIS_VAD_AGGRESSIVENESS", "2"))
