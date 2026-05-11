@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import os
+import re
 from typing import Awaitable, Callable, Optional
 
 import av
@@ -10,6 +11,45 @@ import numpy as np
 import pyttsx3
 import sounddevice as sd
 from faster_whisper import WhisperModel
+
+
+# Markdown stripping for TTS. Both edge-tts and SAPI read these
+# characters literally ("star bold star") which destroys the illusion.
+# Patterns are conservative: only match paired emphasis to avoid eating
+# stray asterisks the model might legitimately want spoken.
+_MD_BOLD_STAR = re.compile(r"\*\*(.+?)\*\*", re.DOTALL)
+_MD_BOLD_UNDER = re.compile(r"__(.+?)__", re.DOTALL)
+_MD_EM_STAR = re.compile(r"(?<!\w)\*(?!\s)(.+?)(?<!\s)\*(?!\w)", re.DOTALL)
+_MD_EM_UNDER = re.compile(r"(?<!\w)_(?!\s)(.+?)(?<!\s)_(?!\w)", re.DOTALL)
+_MD_CODE = re.compile(r"`+([^`]+)`+")
+_MD_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+_MD_HEADING = re.compile(r"^\s*#{1,6}\s+", re.MULTILINE)
+_MD_BULLET = re.compile(r"^\s*[-*+]\s+", re.MULTILINE)
+# Stray asterisks/underscores that survived the paired patterns (e.g. a
+# lone "*" at the start of a fragment streamed mid-sentence).
+_MD_STRAY = re.compile(r"(?<!\w)[\*_](?!\w)")
+
+
+def strip_markdown_for_speech(text: str) -> str:
+    """Remove markdown punctuation that TTS would read aloud as literal chars.
+
+    Preserves the inner words and drops the syntax. Safe to apply per-chunk
+    in the streaming pipeline — paired emphasis that splits across a chunk
+    boundary is rare in well-formed prose and the stray-char pass mops up
+    any leftover lone asterisks.
+    """
+    if not text:
+        return text
+    text = _MD_BOLD_STAR.sub(r"\1", text)
+    text = _MD_BOLD_UNDER.sub(r"\1", text)
+    text = _MD_EM_STAR.sub(r"\1", text)
+    text = _MD_EM_UNDER.sub(r"\1", text)
+    text = _MD_CODE.sub(r"\1", text)
+    text = _MD_LINK.sub(r"\1", text)
+    text = _MD_HEADING.sub("", text)
+    text = _MD_BULLET.sub("", text)
+    text = _MD_STRAY.sub("", text)
+    return text
 
 
 WordEvent = dict  # {"text": str, "offset_ms": float, "duration_ms": float}
