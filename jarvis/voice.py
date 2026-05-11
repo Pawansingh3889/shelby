@@ -31,6 +31,12 @@ def get_stt(model_size: str = DEFAULT_STT_MODEL) -> WhisperModel:
     return _stt
 
 
+def warmup_stt() -> None:
+    model = get_stt()
+    silent = np.zeros(SAMPLE_RATE, dtype=np.float32)
+    list(model.transcribe(silent, beam_size=1, vad_filter=False)[0])
+
+
 def transcribe(audio: np.ndarray) -> str:
     if audio.size == 0:
         return ""

@@ -1,13 +1,17 @@
 import anyio
 
 from .brain import Brain
-from .voice import Recorder, speak_async, transcribe
+from .voice import Recorder, speak_async, transcribe, warmup_stt
 
 
 async def _loop() -> None:
     print("Jarvis voice mode.")
     print("  Enter to start recording, Enter again to stop and send.")
     print("  Type ':q' (then Enter) to exit.\n")
+
+    print("[warming up speech-to-text]", flush=True)
+    warmup_stt()
+    print("[ready]\n", flush=True)
 
     rec = Recorder()
     async with Brain() as brain:
