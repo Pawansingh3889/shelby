@@ -175,6 +175,8 @@ class Brain:
                 "mcp__jarvis__github_pending",
                 "mcp__claude_ai_Gmail__search_threads",
                 "mcp__claude_ai_Gmail__get_thread",
+                "mcp__claude_ai_Google_Calendar__list_events",
+                "mcp__claude_ai_Google_Calendar__list_calendars",
             ],
             disallowed_tools=["Bash", "Edit", "Write", "Read"],
             system_prompt=SYSTEM_PROMPT,
