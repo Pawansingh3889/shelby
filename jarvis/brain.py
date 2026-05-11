@@ -4,6 +4,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+import httpx
+
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
@@ -12,6 +14,9 @@ from claude_agent_sdk import (
     create_sdk_mcp_server,
     tool,
 )
+
+
+DEFAULT_LOCATION = os.environ.get("JARVIS_LOCATION", "Hull")
 
 
 @tool("current_time", "Get the current local time on this computer", {})
@@ -29,6 +34,20 @@ async def system_info(args):
         "node": platform.node(),
     }
     text = "\n".join(f"{k}: {v}" for k, v in info.items())
+    return {"content": [{"type": "text", "text": text}]}
+
+
+@tool(
+    "weather",
+    "Get current weather for a location. Pass location as a string, or omit for the user's home town.",
+    {"location": str},
+)
+async def weather(args):
+    location = (args.get("location") or DEFAULT_LOCATION).strip()
+    fmt = "%l: %c %t, feels like %f, humidity %h, wind %w"
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.get(f"https://wttr.in/{location}", params={"format": fmt})
+    text = r.text.strip() if r.status_code == 200 else f"weather lookup failed ({r.status_code})"
     return {"content": [{"type": "text", "text": text}]}
 
 
@@ -60,7 +79,7 @@ class Brain:
         local = create_sdk_mcp_server(
             name="jarvis-tools",
             version="0.1.0",
-            tools=[current_time, system_info],
+            tools=[current_time, system_info, weather],
         )
         servers = {"jarvis": local}
         if extra_mcp_servers:
@@ -72,6 +91,7 @@ class Brain:
             allowed_tools=[
                 "mcp__jarvis__current_time",
                 "mcp__jarvis__system_info",
+                "mcp__jarvis__weather",
             ],
             cli_path=cli_path,
         )
