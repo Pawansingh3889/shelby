@@ -1,3 +1,6 @@
+import os
+import platform
+from pathlib import Path
 from typing import Optional
 
 from claude_agent_sdk import (
@@ -9,13 +12,40 @@ from claude_agent_sdk import (
 )
 
 
+def _detect_system_claude_cli() -> Optional[Path]:
+    explicit = os.environ.get("CLAUDE_AGENT_CLI_PATH")
+    if explicit:
+        p = Path(explicit)
+        return p if p.exists() else None
+
+    if platform.system() == "Windows":
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            base = Path(appdata) / "Claude" / "claude-code"
+            if base.is_dir():
+                versions = sorted(
+                    (d for d in base.iterdir() if d.is_dir()),
+                    key=lambda d: d.name,
+                    reverse=True,
+                )
+                for v in versions:
+                    candidate = v / "claude.exe"
+                    if candidate.exists():
+                        return candidate
+    return None
+
+
 class Brain:
     def __init__(self, extra_mcp_servers: Optional[dict] = None) -> None:
         servers: dict = {}
         if extra_mcp_servers:
             servers.update(extra_mcp_servers)
 
-        self._options = ClaudeAgentOptions(mcp_servers=servers)
+        cli_path = _detect_system_claude_cli()
+        self._options = ClaudeAgentOptions(
+            mcp_servers=servers,
+            cli_path=cli_path,
+        )
         self._client: Optional[ClaudeSDKClient] = None
 
     async def __aenter__(self):
