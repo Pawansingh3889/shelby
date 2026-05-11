@@ -144,6 +144,36 @@
       font-weight: 600;
       color: var(--fg);
     }
+    .brand .name {
+      transition: color 600ms ease;
+    }
+    .brand .mode {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 4px;
+      padding: 2px 8px;
+      border: 1px solid var(--dim);
+      border-radius: 999px;
+      font-size: 9px;
+      letter-spacing: 0.28em;
+      color: var(--muted);
+      transition: border-color 600ms ease, color 600ms ease, background 600ms ease;
+    }
+    .brand .mode.online  { color: #4ade80; border-color: rgba(74, 222, 128, 0.45); background: rgba(74, 222, 128, 0.08); }
+    .brand .mode.offline { color: #fbbf24; border-color: rgba(251, 191, 36, 0.45); background: rgba(251, 191, 36, 0.08); }
+    .brand .mode::before {
+      content: "";
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 6px currentColor;
+    }
+    /* When offline / Jarvis, the brand name shifts to a warmer amber to
+       reinforce the persona change without re-skinning the whole UI. */
+    body.persona-jarvis .brand .name { color: #fde68a; }
     .brand .dot {
       width: 8px;
       height: 8px;
@@ -918,7 +948,11 @@
 
   <div class="scene">
     <div class="topbar">
-      <span class="brand"><span class="dot"></span>SHELBY</span>
+      <span class="brand">
+        <span class="dot"></span>
+        <span class="name" id="brand-name">SHELBY</span>
+        <span class="mode" id="brand-mode">…</span>
+      </span>
       <span class="clock" id="clock"></span>
       <span class="state-badge" id="state">idle</span>
     </div>
@@ -1248,6 +1282,27 @@
     const bodyEl = document.getElementById("body");
     const historyEl = document.getElementById("history");
     const doingPill = document.getElementById("doing-pill");
+    const brandNameEl = document.getElementById("brand-name");
+    const brandModeEl = document.getElementById("brand-mode");
+
+    let currentPersona = "";
+    let currentMode = "";
+    function setPersonaMode(persona, mode) {
+      // Empty values mean "no update" — the server sends them on payloads
+      // before HybridBrain has finished its first probe.
+      if (persona && persona !== currentPersona) {
+        currentPersona = persona;
+        brandNameEl.textContent = persona.toUpperCase();
+        document.body.classList.remove("persona-shelby", "persona-jarvis");
+        document.body.classList.add("persona-" + persona.toLowerCase());
+      }
+      if (mode && mode !== currentMode) {
+        currentMode = mode;
+        brandModeEl.textContent = mode.toUpperCase();
+        brandModeEl.classList.remove("online", "offline");
+        brandModeEl.classList.add(mode === "online" ? "online" : "offline");
+      }
+    }
 
     function setDoing(label) {
       if (label && currentState === "thinking") {
@@ -1429,6 +1484,9 @@
       document.body.dataset.state = data.state;
       stateEl.textContent = data.state;
       labelEl.textContent = labels[data.state] || data.state;
+
+      // Persona + connectivity badge update.
+      setPersonaMode(data.persona, data.mode);
 
       // Drive the Three.js particle sphere if it's available.
       if (window.__particleSphere) {
