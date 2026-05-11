@@ -12,7 +12,7 @@ import uvicorn
 
 from .ambient import get_wake_model, record_until_silence, wait_for_wake
 from .brain import Brain
-from .voice import speak_async, transcribe, warmup_stt, warmup_tts
+from .voice import speak_async, strip_markdown_for_speech, transcribe, warmup_stt, warmup_tts
 from .web import app, publish
 
 
@@ -111,12 +111,13 @@ async def _stream_speak(brain: Brain, prompt: str) -> str:
                     end = _next_chunk_boundary(buffer)
                     if end < 0:
                         break
-                    chunk = buffer[:end].strip()
+                    chunk = strip_markdown_for_speech(buffer[:end].strip())
                     buffer = buffer[end:]
                     if chunk:
                         await queue.put(chunk)
-            if buffer.strip():
-                await queue.put(buffer.strip())
+            tail = strip_markdown_for_speech(buffer.strip())
+            if tail:
+                await queue.put(tail)
         finally:
             await queue.put(None)
 
