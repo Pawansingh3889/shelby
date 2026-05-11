@@ -15,6 +15,7 @@ dependencies = [
 
 [project.scripts]
 jarvis = "jarvis.cli:run"
+jarvis-voice = "jarvis.voice_cli:run"
 
 [build-system]
 requires = ["hatchling"]
