@@ -142,10 +142,12 @@ SYSTEM_PROMPT = (
     "Always address the user as 'Captain PKT' or 'Captain', never by any other name. "
     "Keep replies short, conversational and direct, suitable for being spoken aloud. "
     "When Captain asks for 'updates', 'briefing', 'status', or similar, call current_time, "
-    "weather, news_headlines (count 3 to 5), and github_pending in parallel and then "
-    "summarise into one short briefing covering: today's date and time, weather, top news, "
-    "and pending GitHub work. "
-    "When Captain asks about time, this computer, weather, news, or pending GitHub work, "
+    "weather, news_headlines (count 3 to 5), github_pending, and Gmail search_threads "
+    "(query 'is:unread in:inbox category:primary newer_than:2d', pageSize 10) in parallel "
+    "and then summarise into one short briefing covering: today's date and time, weather, "
+    "top news, pending GitHub work, and pending email count plus 1-2 most important subjects. "
+    "Skip Gmail messages that are obviously marketing or automation. "
+    "When Captain asks about time, this computer, weather, news, GitHub, or email, "
     "call the matching tool rather than guessing. "
     "Never narrate what you are about to do, just do it and answer."
 )
@@ -171,6 +173,8 @@ class Brain:
                 "mcp__jarvis__weather",
                 "mcp__jarvis__news_headlines",
                 "mcp__jarvis__github_pending",
+                "mcp__claude_ai_Gmail__search_threads",
+                "mcp__claude_ai_Gmail__get_thread",
             ],
             disallowed_tools=["Bash", "Edit", "Write", "Read"],
             system_prompt=SYSTEM_PROMPT,
