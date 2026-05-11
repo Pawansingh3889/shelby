@@ -24,6 +24,33 @@ PORT = int(os.environ.get("SHELBY_WEB_PORT", "8765"))
 _SENTENCE_RE = re.compile(r"[.!?](?:\s|$)|[,;:](?=\s)")
 
 
+# Friendly verb-form labels for each tool, shown as a pill under the orb
+# while Shelby is fetching. Keys are matched against the trailing segment
+# of the tool name after the last "__" (mcp__shelby__weather -> weather).
+_TOOL_LABELS = {
+    "current_time": "Checking the time",
+    "system_info": "Checking system",
+    "weather": "Checking weather",
+    "forecast": "Pulling forecast",
+    "news_headlines": "Reading the news",
+    "github_pending": "Sweeping GitHub",
+    "search_threads": "Sweeping inbox",
+    "get_thread": "Reading email",
+    "list_events": "Checking calendar",
+    "list_calendars": "Listing calendars",
+    "WebSearch": "Searching the web",
+    "WebFetch": "Reading page",
+}
+
+
+def _pretty_tool(full_name: str) -> str:
+    """Turn an MCP tool name into a short user-facing label."""
+    if not full_name:
+        return ""
+    short = full_name.split("__")[-1]
+    return _TOOL_LABELS.get(short) or _TOOL_LABELS.get(full_name) or short.replace("_", " ")
+
+
 def _serve() -> None:
     config = uvicorn.Config(app, host=HOST, port=PORT, log_level="warning", access_log=False)
     server = uvicorn.Server(config)
@@ -61,12 +88,25 @@ async def _stream_speak(brain: Brain, prompt: str) -> str:
     """
     queue: asyncio.Queue[str | None] = asyncio.Queue()
     full_reply: list[str] = []
+    # Match the quoted display the main loop publishes before calling us,
+    # so the user transcript stays visible while we update `doing` pills.
+    display_prompt = f"“{prompt}”"
 
     async def producer() -> None:
         buffer = ""
         try:
-            async for delta in brain.process_stream(prompt):
-                buffer += delta
+            async for event in brain.process_stream(prompt):
+                etype = event.get("type") if isinstance(event, dict) else None
+                if etype == "tool":
+                    label = _pretty_tool(event.get("name", ""))
+                    if label:
+                        # Keep the user's transcript visible in `text`; the
+                        # frontend shows `doing` as a pill underneath.
+                        publish("thinking", text=display_prompt, doing=label)
+                    continue
+                if etype != "text":
+                    continue
+                buffer += event.get("text", "")
                 while True:
                     end = _next_chunk_boundary(buffer)
                     if end < 0:
