@@ -18,7 +18,7 @@ async def _loop() -> None:
     get_wake_model()
     print("[ready, listening for 'hey jarvis']\n", flush=True)
 
-    follow_up_window_ms = int(os.environ.get("JARVIS_FOLLOWUP_MS", "5000"))
+    follow_up_window_ms = int(os.environ.get("SHELBY_FOLLOWUP_MS", "5000"))
 
     async with Brain() as brain:
         try:

@@ -14,8 +14,8 @@ from .voice import speak_async, transcribe, warmup_stt
 from .web import app, publish
 
 
-HOST = os.environ.get("JARVIS_WEB_HOST", "127.0.0.1")
-PORT = int(os.environ.get("JARVIS_WEB_PORT", "8765"))
+HOST = os.environ.get("SHELBY_WEB_HOST", "127.0.0.1")
+PORT = int(os.environ.get("SHELBY_WEB_PORT", "8765"))
 
 
 def _serve() -> None:
@@ -25,7 +25,7 @@ def _serve() -> None:
 
 
 async def _loop() -> None:
-    follow_up_window_ms = int(os.environ.get("JARVIS_FOLLOWUP_MS", "5000"))
+    follow_up_window_ms = int(os.environ.get("SHELBY_FOLLOWUP_MS", "5000"))
 
     print(f"[serving UI at http://{HOST}:{PORT}]", flush=True)
     print("[warming up speech-to-text]", flush=True)

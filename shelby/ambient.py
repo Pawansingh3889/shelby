@@ -15,15 +15,15 @@ SAMPLE_RATE = 16000
 CHANNELS = 1
 DTYPE = "int16"
 
-WAKE_MODEL = os.environ.get("JARVIS_WAKE_MODEL", "hey_jarvis")
-WAKE_THRESHOLD = float(os.environ.get("JARVIS_WAKE_THRESHOLD", "0.5"))
+WAKE_MODEL = os.environ.get("SHELBY_WAKE_MODEL", "hey_jarvis")
+WAKE_THRESHOLD = float(os.environ.get("SHELBY_WAKE_THRESHOLD", "0.5"))
 
-VAD_AGGRESSIVENESS = int(os.environ.get("JARVIS_VAD_AGGRESSIVENESS", "2"))
+VAD_AGGRESSIVENESS = int(os.environ.get("SHELBY_VAD_AGGRESSIVENESS", "2"))
 VAD_FRAME_MS = 30
 VAD_FRAME_SAMPLES = (SAMPLE_RATE * VAD_FRAME_MS) // 1000
-SILENCE_HANG_MS = int(os.environ.get("JARVIS_SILENCE_HANG_MS", "1500"))
-MAX_UTTERANCE_S = int(os.environ.get("JARVIS_MAX_UTTERANCE_S", "30"))
-MIN_UTTERANCE_S = float(os.environ.get("JARVIS_MIN_UTTERANCE_S", "0.4"))
+SILENCE_HANG_MS = int(os.environ.get("SHELBY_SILENCE_HANG_MS", "1500"))
+MAX_UTTERANCE_S = int(os.environ.get("SHELBY_MAX_UTTERANCE_S", "30"))
+MIN_UTTERANCE_S = float(os.environ.get("SHELBY_MIN_UTTERANCE_S", "0.4"))
 
 
 _wake_model: Optional[WakeModel] = None

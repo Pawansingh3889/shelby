@@ -17,8 +17,8 @@ from claude_agent_sdk import (
 )
 
 
-GITHUB_USERNAME = os.environ.get("JARVIS_GITHUB_USERNAME", "Pawansingh3889")
-DEFAULT_LOCATION = os.environ.get("JARVIS_LOCATION", "Hull")
+GITHUB_USERNAME = os.environ.get("SHELBY_GITHUB_USERNAME", "Pawansingh3889")
+DEFAULT_LOCATION = os.environ.get("SHELBY_LOCATION", "Hull")
 
 
 @tool("current_time", "Get the current local time on this computer", {})
@@ -135,7 +135,7 @@ async def news_headlines(args):
 async def github_pending(args):
     user = GITHUB_USERNAME
     headers = {"Accept": "application/vnd.github+json"}
-    pat = os.environ.get("JARVIS_GITHUB_TOKEN")
+    pat = os.environ.get("SHELBY_GITHUB_TOKEN")
     if pat:
         headers["Authorization"] = f"Bearer {pat}"
 
@@ -240,11 +240,11 @@ class Brain:
         os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
 
         local = create_sdk_mcp_server(
-            name="jarvis-tools",
+            name="shelby-tools",
             version="0.1.0",
             tools=[current_time, system_info, weather, forecast, news_headlines, github_pending],
         )
-        servers = {"jarvis": local}
+        servers = {"shelby": local}
         if extra_mcp_servers:
             servers.update(extra_mcp_servers)
 
@@ -252,12 +252,12 @@ class Brain:
         self._options = ClaudeAgentOptions(
             mcp_servers=servers,
             allowed_tools=[
-                "mcp__jarvis__current_time",
-                "mcp__jarvis__system_info",
-                "mcp__jarvis__weather",
-                "mcp__jarvis__forecast",
-                "mcp__jarvis__news_headlines",
-                "mcp__jarvis__github_pending",
+                "mcp__shelby__current_time",
+                "mcp__shelby__system_info",
+                "mcp__shelby__weather",
+                "mcp__shelby__forecast",
+                "mcp__shelby__news_headlines",
+                "mcp__shelby__github_pending",
                 "mcp__claude_ai_Gmail__search_threads",
                 "mcp__claude_ai_Gmail__get_thread",
                 "mcp__claude_ai_Google_Calendar__list_events",

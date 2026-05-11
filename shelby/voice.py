@@ -15,9 +15,9 @@ from faster_whisper import WhisperModel
 SAMPLE_RATE = 16000
 CHANNELS = 1
 DTYPE = "int16"
-DEFAULT_STT_MODEL = os.environ.get("JARVIS_STT_MODEL", "tiny.en")
-DEFAULT_TTS_VOICE = os.environ.get("JARVIS_TTS_VOICE", "en-GB-SoniaNeural")
-DEFAULT_TTS_RATE = os.environ.get("JARVIS_TTS_RATE", "+10%")
+DEFAULT_STT_MODEL = os.environ.get("SHELBY_STT_MODEL", "tiny.en")
+DEFAULT_TTS_VOICE = os.environ.get("SHELBY_TTS_VOICE", "en-GB-SoniaNeural")
+DEFAULT_TTS_RATE = os.environ.get("SHELBY_TTS_RATE", "+10%")
 
 
 _stt: Optional[WhisperModel] = None
