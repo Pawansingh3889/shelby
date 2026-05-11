@@ -14,6 +14,7 @@ dependencies = [
   "edge-tts>=7.2",
   "av>=17.0",
   "webrtcvad-wheels>=2.0",
+  "openwakeword>=0.6",
 ]
 
 [project.scripts]

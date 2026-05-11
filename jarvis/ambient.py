@@ -5,13 +5,18 @@ import queue
 from typing import Optional
 
 import numpy as np
+import openwakeword
 import sounddevice as sd
 import webrtcvad
+from openwakeword.model import Model as WakeModel
 
 
 SAMPLE_RATE = 16000
 CHANNELS = 1
 DTYPE = "int16"
+
+WAKE_MODEL = os.environ.get("JARVIS_WAKE_MODEL", "hey_jarvis")
+WAKE_THRESHOLD = float(os.environ.get("JARVIS_WAKE_THRESHOLD", "0.5"))
 
 VAD_AGGRESSIVENESS = int(os.environ.get("JARVIS_VAD_AGGRESSIVENESS", "2"))
 VAD_FRAME_MS = 30
@@ -19,6 +24,42 @@ VAD_FRAME_SAMPLES = (SAMPLE_RATE * VAD_FRAME_MS) // 1000
 SILENCE_HANG_MS = int(os.environ.get("JARVIS_SILENCE_HANG_MS", "800"))
 MAX_UTTERANCE_S = int(os.environ.get("JARVIS_MAX_UTTERANCE_S", "30"))
 MIN_UTTERANCE_S = float(os.environ.get("JARVIS_MIN_UTTERANCE_S", "0.4"))
+
+
+_wake_model: Optional[WakeModel] = None
+
+
+def get_wake_model() -> WakeModel:
+    global _wake_model
+    if _wake_model is None:
+        print(f"[loading wake-word model '{WAKE_MODEL}' (first run downloads ~30MB)]", flush=True)
+        openwakeword.utils.download_models(model_names=[WAKE_MODEL])
+        _wake_model = WakeModel(wakeword_models=[WAKE_MODEL], inference_framework="onnx")
+    return _wake_model
+
+
+def wait_for_wake() -> None:
+    model = get_wake_model()
+    chunk_samples = 1280
+
+    q: "queue.Queue[np.ndarray]" = queue.Queue()
+
+    def _cb(indata, frames, time_info, status):
+        q.put(indata.copy().flatten())
+
+    with sd.InputStream(
+        samplerate=SAMPLE_RATE,
+        channels=CHANNELS,
+        dtype=DTYPE,
+        blocksize=chunk_samples,
+        callback=_cb,
+    ):
+        while True:
+            chunk = q.get()
+            scores = model.predict(chunk)
+            for name, score in scores.items():
+                if score >= WAKE_THRESHOLD:
+                    return
 
 
 def record_until_silence() -> np.ndarray:
