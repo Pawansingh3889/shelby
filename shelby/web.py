@@ -20,12 +20,14 @@ def publish(
     text: Optional[str] = None,
     words: Optional[list] = None,
     append: bool = False,
+    doing: Optional[str] = None,
 ) -> None:
     payload = {
         "state": state,
         "text": text or "",
         "words": words or [],
         "append": bool(append),
+        "doing": doing or "",
     }
     global _last_payload
     # Late-joiners shouldn't see append payloads in isolation, so we never
