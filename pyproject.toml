@@ -21,6 +21,7 @@ dependencies = [
 jarvis = "jarvis.cli:run"
 jarvis-voice = "jarvis.voice_cli:run"
 jarvis-ambient = "jarvis.ambient_cli:run"
+jarvis-demo = "jarvis.web_cli:run"
 
 [build-system]
 requires = ["hatchling"]
@@ -28,3 +29,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["jarvis"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"jarvis/static" = "jarvis/static"
+
