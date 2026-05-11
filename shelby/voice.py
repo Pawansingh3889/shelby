@@ -60,7 +60,10 @@ def transcribe(audio: np.ndarray) -> str:
         return ""
     model = get_stt()
     audio_f32 = audio.astype(np.float32) / 32768.0
-    segments, _ = model.transcribe(audio_f32, beam_size=1, vad_filter=True)
+    # vad_filter=False: webrtcvad already trimmed the audio in
+    # record_until_silence(), so faster-whisper's silero pass is pure
+    # overhead here. Saves ~100-200ms per turn.
+    segments, _ = model.transcribe(audio_f32, beam_size=1, vad_filter=False)
     return " ".join(s.text.strip() for s in segments).strip()
 
 
