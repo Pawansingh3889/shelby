@@ -155,6 +155,10 @@ SYSTEM_PROMPT = (
 
 class Brain:
     def __init__(self, extra_mcp_servers: Optional[dict] = None) -> None:
+        # Force Claude Code to use Max OAuth, never the metered API path.
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
+
         local = create_sdk_mcp_server(
             name="jarvis-tools",
             version="0.1.0",
