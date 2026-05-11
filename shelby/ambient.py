@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import queue
+import threading
 from typing import Optional
 
 import numpy as np
@@ -9,6 +10,12 @@ import openwakeword
 import sounddevice as sd
 import webrtcvad
 from openwakeword.model import Model as WakeModel
+
+
+# Set by an HTTP /wake POST (from the web UI's click-to-wake button) to
+# short-circuit the wake-word listener. wait_for_wake polls this event
+# between mic chunks and returns immediately when set.
+MANUAL_WAKE = threading.Event()
 
 
 SAMPLE_RATE = 16000
@@ -55,7 +62,13 @@ def wait_for_wake() -> None:
         callback=_cb,
     ):
         while True:
-            chunk = q.get()
+            if MANUAL_WAKE.is_set():
+                MANUAL_WAKE.clear()
+                return
+            try:
+                chunk = q.get(timeout=0.1)
+            except queue.Empty:
+                continue
             scores = model.predict(chunk)
             for name, score in scores.items():
                 if score >= WAKE_THRESHOLD:

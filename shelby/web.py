@@ -7,7 +7,7 @@ from typing import Optional
 
 from sse_starlette.sse import EventSourceResponse
 from starlette.applications import Starlette
-from starlette.responses import FileResponse
+from starlette.responses import FileResponse, Response
 from starlette.routing import Route
 
 
@@ -29,6 +29,12 @@ def publish(state: str, text: Optional[str] = None, words: Optional[list] = None
 
 async def _homepage(request):
     return FileResponse(Path(__file__).parent / "static" / "index.html")
+
+
+async def _wake(request):
+    from .ambient import MANUAL_WAKE
+    MANUAL_WAKE.set()
+    return Response(status_code=204)
 
 
 async def _events(request):
@@ -54,5 +60,6 @@ app = Starlette(
     routes=[
         Route("/", _homepage),
         Route("/events", _events),
+        Route("/wake", _wake, methods=["POST"]),
     ]
 )

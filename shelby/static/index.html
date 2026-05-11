@@ -288,6 +288,33 @@
       55% { transform: scale(0.98); }
       80% { transform: scale(1.03); }
     }
+    /* Click-to-wake button below the orb. Replaces saying 'Hey Jarvis' when
+       typing's faster or when the mic is uncooperative. */
+    .wake-btn {
+      position: relative;
+      margin-top: 56px;
+      padding: 10px 22px;
+      background: transparent;
+      border: 1px solid var(--dim);
+      border-radius: 999px;
+      color: var(--muted);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: border-color 200ms, color 200ms, background 200ms, transform 120ms;
+    }
+    .wake-btn:hover {
+      border-color: var(--listen);
+      color: var(--listen);
+      background: rgba(34, 211, 238, 0.05);
+    }
+    .wake-btn:active { transform: scale(0.97); }
+    .wake-btn:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
     /* Follow-up countdown ring around the orb when she's waiting for your reply
        without re-waking. Activated by adding the .followup class to body. */
     .stage::after {
@@ -513,6 +540,7 @@
         <div class="bar"></div><div class="bar"></div><div class="bar"></div>
         <div class="bar"></div><div class="bar"></div><div class="bar"></div>
       </div>
+      <button class="wake-btn" id="wake-btn" type="button">Wake Shelby</button>
     </div>
 
     <div class="text-pane">
@@ -705,6 +733,17 @@
         }, 200);
       }
     }
+
+    // Click-to-wake: POSTs to /wake which sets the MANUAL_WAKE event
+    // server-side, short-circuiting the wake-word listener.
+    const wakeBtn = document.getElementById("wake-btn");
+    wakeBtn.addEventListener("click", async () => {
+      wakeBtn.disabled = true;
+      try {
+        await fetch("/wake", { method: "POST" });
+      } catch (_) {}
+      setTimeout(() => { wakeBtn.disabled = false; }, 1500);
+    });
 
     const evt = new EventSource("/events");
     evt.onmessage = (e) => {
