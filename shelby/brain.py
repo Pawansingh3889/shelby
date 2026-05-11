@@ -1,11 +1,34 @@
 import os
 import platform
+import time
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
-from typing import AsyncIterator, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
 import httpx
+
+
+# Tiny in-memory TTL cache so a follow-up briefing within ~60s reuses
+# the weather / news / github results from the previous one instead of
+# re-fetching. Keyed on (tool_name, frozenset of args items).
+_TOOL_CACHE: dict[tuple[str, frozenset], tuple[float, Any]] = {}
+
+
+async def _cached(
+    name: str,
+    args: dict,
+    ttl_s: float,
+    fetch: Callable[[], Awaitable[Any]],
+) -> Any:
+    key = (name, frozenset((k, str(v)) for k, v in (args or {}).items()))
+    now = time.monotonic()
+    hit = _TOOL_CACHE.get(key)
+    if hit is not None and now - hit[0] < ttl_s:
+        return hit[1]
+    value = await fetch()
+    _TOOL_CACHE[key] = (now, value)
+    return value
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -51,10 +74,14 @@ async def system_info(args):
 )
 async def weather(args):
     location = (args.get("location") or DEFAULT_LOCATION).strip()
-    fmt = "%l: %c %t, feels like %f, humidity %h, wind %w"
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        r = await client.get(f"https://wttr.in/{location}", params={"format": fmt})
-    text = r.text.strip() if r.status_code == 200 else f"weather lookup failed ({r.status_code})"
+
+    async def _fetch() -> str:
+        fmt = "%l: %c %t, feels like %f, humidity %h, wind %w"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(f"https://wttr.in/{location}", params={"format": fmt})
+        return r.text.strip() if r.status_code == 200 else f"weather lookup failed ({r.status_code})"
+
+    text = await _cached("weather", {"location": location}, ttl_s=300.0, fetch=_fetch)
     return {"content": [{"type": "text", "text": text}]}
 
 
@@ -122,13 +149,22 @@ async def forecast(args):
 )
 async def news_headlines(args):
     count = max(1, min(int(args.get("count") or 5), 15))
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        r = await client.get("https://feeds.bbci.co.uk/news/rss.xml")
-    if r.status_code != 200:
-        return {"content": [{"type": "text", "text": f"news lookup failed ({r.status_code})"}]}
-    root = ET.fromstring(r.text)
-    titles = [item.findtext("title", "") for item in root.findall(".//item")][:count]
-    text = "\n".join(f"- {t}" for t in titles if t) or "no headlines"
+
+    async def _fetch() -> str:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get("https://feeds.bbci.co.uk/news/rss.xml")
+        if r.status_code != 200:
+            return f"news lookup failed ({r.status_code})"
+        root = ET.fromstring(r.text)
+        titles = [item.findtext("title", "") for item in root.findall(".//item")][:15]
+        return "\n".join(f"- {t}" for t in titles if t) or "no headlines"
+
+    # Cache the full top-15 list; slice to requested count after.
+    full = await _cached("news_headlines", {}, ttl_s=600.0, fetch=_fetch)
+    if full.startswith("news lookup failed") or full == "no headlines":
+        text = full
+    else:
+        text = "\n".join(full.splitlines()[:count])
     return {"content": [{"type": "text", "text": text}]}
 
 
@@ -171,10 +207,13 @@ async def github_pending(args):
             lines.append(f"  - {repo}#{item['number']}: {item['title']}")
         return "\n".join(lines)
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        sections = await asyncio.gather(*(_one(client, label, q) for label, q in queries))
+    async def _fetch() -> str:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            sections = await asyncio.gather(*(_one(client, label, q) for label, q in queries))
+        return "\n\n".join(sections)
 
-    return {"content": [{"type": "text", "text": "\n\n".join(sections)}]}
+    text = await _cached("github_pending", {"user": user}, ttl_s=120.0, fetch=_fetch)
+    return {"content": [{"type": "text", "text": text}]}
 
 
 def _detect_system_claude_cli() -> Optional[Path]:
