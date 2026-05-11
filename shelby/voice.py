@@ -41,6 +41,20 @@ def warmup_stt() -> None:
     list(model.transcribe(silent, beam_size=1, vad_filter=False)[0])
 
 
+async def warmup_tts(
+    voice: str = DEFAULT_TTS_VOICE,
+    rate: str = DEFAULT_TTS_RATE,
+) -> None:
+    """Run a tiny edge-tts request to pay the TLS + websocket cold-start cost
+    once at boot instead of on the first real reply. Saves ~400-600ms off the
+    first user-visible TTS chunk.
+    """
+    try:
+        await _edge_tts_to_pcm(".", voice, rate)
+    except Exception as exc:
+        print(f"[tts warmup skipped: {exc}]", flush=True)
+
+
 def transcribe(audio: np.ndarray) -> str:
     if audio.size == 0:
         return ""
