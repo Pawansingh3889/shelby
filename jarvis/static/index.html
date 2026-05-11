@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Jarvis</title>
+  <title>Shelby</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -363,8 +363,8 @@
       text-transform: uppercase;
       opacity: 0.8;
     }
-    .history-item.jarvis::before {
-      content: "jarvis · ";
+    .history-item.shelby::before {
+      content: "shelby · ";
       font-family: "JetBrains Mono", monospace;
       font-size: 10px;
       letter-spacing: 0.2em;
@@ -387,7 +387,7 @@
 
   <div class="scene">
     <div class="topbar">
-      <span class="brand"><span class="dot"></span>JARVIS</span>
+      <span class="brand"><span class="dot"></span>SHELBY</span>
       <span class="clock" id="clock"></span>
       <span class="state-badge" id="state">idle</span>
     </div>
@@ -461,7 +461,7 @@
     };
 
     let lastUserText = null;
-    let lastJarvisText = null;
+    let lastShelbyText = null;
     let currentState = "idle";
 
     function pushHistory(role, text) {
@@ -489,14 +489,14 @@
         pushHistory("you", lastUserText);
         lastUserText = null;
       }
-      if (prev === "speaking" && data.state !== "speaking" && lastJarvisText) {
-        pushHistory("jarvis", lastJarvisText);
-        lastJarvisText = null;
+      if (prev === "speaking" && data.state !== "speaking" && lastShelbyText) {
+        pushHistory("shelby", lastShelbyText);
+        lastShelbyText = null;
       }
 
       // Track current
       if (data.state === "thinking") lastUserText = data.text;
-      if (data.state === "speaking") lastJarvisText = data.text;
+      if (data.state === "speaking") lastShelbyText = data.text;
 
       // Body fade
       bodyEl.style.opacity = "0";

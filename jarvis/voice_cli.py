@@ -5,7 +5,7 @@ from .voice import Recorder, speak_async, transcribe, warmup_stt
 
 
 async def _loop() -> None:
-    print("Jarvis voice mode.")
+    print("Shelby voice mode.")
     print("  Enter to start recording, Enter again to stop and send.")
     print("  Type ':q' (then Enter) to exit.\n")
 
@@ -45,10 +45,10 @@ async def _loop() -> None:
             try:
                 reply = await brain.process(text)
             except Exception as exc:
-                print(f"jarvis> [error: {exc}]")
+                print(f"shelby> [error: {exc}]")
                 continue
 
-            print(f"jarvis> {reply}")
+            print(f"shelby> {reply}")
             await speak_async(reply)
 
 

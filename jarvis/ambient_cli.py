@@ -8,15 +8,15 @@ from .voice import speak_async, transcribe, warmup_stt
 
 
 async def _loop() -> None:
-    print("Jarvis ambient mode.")
-    print("  Say 'Hey Jarvis' to wake. Speak. Pause. Reply will be spoken.")
+    print("Shelby ambient mode.")
+    print("  Say 'Computer' to wake. Speak. Pause. Reply will be spoken.")
     print("  Ctrl-C to exit.\n")
 
     print("[warming up speech-to-text]", flush=True)
     warmup_stt()
     print("[loading wake-word model]", flush=True)
     get_wake_model()
-    print("[ready, listening for 'hey jarvis']\n", flush=True)
+    print("[ready, listening for 'computer']\n", flush=True)
 
     follow_up_window_ms = int(os.environ.get("JARVIS_FOLLOWUP_MS", "5000"))
 
@@ -42,10 +42,10 @@ async def _loop() -> None:
                     try:
                         reply = await brain.process(text)
                     except Exception as exc:
-                        print(f"jarvis> [error: {exc}]", flush=True)
+                        print(f"shelby> [error: {exc}]", flush=True)
                         break
 
-                    print(f"jarvis> {reply}", flush=True)
+                    print(f"shelby> {reply}", flush=True)
                     await speak_async(reply)
 
                     print(f"> listening for follow-up (no wake needed, {follow_up_window_ms // 1000}s)...", flush=True)
@@ -54,7 +54,7 @@ async def _loop() -> None:
                         print("(no follow-up)", flush=True)
                         break
 
-                print("[listening for 'hey jarvis']\n", flush=True)
+                print("[listening for 'computer']\n", flush=True)
         except KeyboardInterrupt:
             print("\n[shutting down]")
 

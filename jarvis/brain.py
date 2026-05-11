@@ -195,7 +195,7 @@ def _detect_system_claude_cli() -> Optional[Path]:
 
 
 SYSTEM_PROMPT = (
-    "You are Jarvis, a personal voice assistant for Captain PKT. "
+    "You are Shelby, a personal voice assistant for Captain PKT. "
     "Always address the user as 'Captain PKT' or 'Captain', never by any other name. "
     "Keep replies short, conversational and direct, suitable for being spoken aloud. "
     "\n\n"

@@ -4,7 +4,7 @@ from .brain import Brain
 
 
 async def _loop() -> None:
-    print("Jarvis brain (text mode). Type :q or Ctrl-D to exit.")
+    print("Shelby brain (text mode). Type :q or Ctrl-D to exit.")
     async with Brain() as brain:
         while True:
             try:
@@ -19,9 +19,9 @@ async def _loop() -> None:
             try:
                 reply = await brain.process(text)
             except Exception as exc:
-                print(f"jarvis> [error: {exc}]")
+                print(f"shelby> [error: {exc}]")
                 continue
-            print(f"jarvis> {reply}")
+            print(f"shelby> {reply}")
 
 
 def run() -> None:
