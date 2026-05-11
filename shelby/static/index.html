@@ -612,11 +612,81 @@
       text-transform: uppercase;
       opacity: 0.8;
     }
+    /* HUD: viewport corner brackets, frame the screen as a tactical HUD.
+       Thin L-shape brackets recolour to match the active state. */
+    .hud-corner {
+      position: fixed;
+      width: 56px;
+      height: 56px;
+      border: 1px solid var(--listen);
+      opacity: 0.32;
+      pointer-events: none;
+      z-index: 2;
+      transition: opacity 700ms ease, border-color 700ms ease;
+    }
+    .hud-corner.tl { top: 18px;    left: 18px;   border-right: 0; border-bottom: 0; }
+    .hud-corner.tr { top: 18px;    right: 18px;  border-left:  0; border-bottom: 0; }
+    .hud-corner.bl { bottom: 18px; left: 18px;   border-right: 0; border-top:    0; }
+    .hud-corner.br { bottom: 18px; right: 18px;  border-left:  0; border-top:    0; }
+    body[data-state="listening"] .hud-corner { opacity: 0.7;  border-color: var(--listen); }
+    body[data-state="thinking"]  .hud-corner { opacity: 0.55; border-color: var(--think); }
+    body[data-state="speaking"]  .hud-corner { opacity: 0.55; border-color: var(--speak); }
+
+    /* HUD side panels: tactical readout columns hugging the viewport edges.
+       Left = location + session, right = systems + reactor. Mono font,
+       wide letter-spacing, low alpha so they read as ambient chrome
+       rather than primary content. */
+    .hud-side {
+      position: fixed;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 2;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 9.5px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: rgba(245, 247, 250, 0.55);
+      opacity: 0.55;
+      transition: opacity 700ms ease;
+    }
+    .hud-side.hud-left  { left: 22px;  align-items: flex-start; text-align: left; }
+    .hud-side.hud-right { right: 22px; align-items: flex-end;   text-align: right; }
+    body[data-state="listening"] .hud-side { opacity: 0.85; }
+    body[data-state="thinking"]  .hud-side { opacity: 0.7; }
+    body[data-state="speaking"]  .hud-side { opacity: 0.75; }
+    .hud-block { display: flex; flex-direction: column; gap: 5px; }
+    .hud-block-label {
+      color: var(--listen);
+      opacity: 0.8;
+      letter-spacing: 0.32em;
+      font-size: 9px;
+    }
+    body[data-state="thinking"] .hud-block-label { color: var(--think); }
+    body[data-state="speaking"] .hud-block-label { color: var(--speak); }
+    .hud-block-line {
+      color: rgba(245, 247, 250, 0.6);
+      font-size: 9.5px;
+      letter-spacing: 0.18em;
+      font-variant-numeric: tabular-nums;
+    }
+    .hud-ok {
+      color: var(--listen);
+      margin-left: 6px;
+      letter-spacing: 0.2em;
+    }
+    @media (max-width: 980px) {
+      .hud-side { display: none; }
+    }
     @media (max-width: 760px) {
       .scene { padding: 20px; }
       .stage { width: 280px; height: 280px; }
       .orb { width: 180px; height: 180px; }
       .body { font-size: 16px; }
+      .hud-corner { width: 38px; height: 38px; }
     }
   </style>
 </head>
@@ -624,6 +694,40 @@
   <div class="stars" id="stars"></div>
   <div class="flare tl"></div>
   <div class="flare br"></div>
+
+  <div class="hud-corner tl"></div>
+  <div class="hud-corner tr"></div>
+  <div class="hud-corner bl"></div>
+  <div class="hud-corner br"></div>
+
+  <aside class="hud-side hud-left" aria-hidden="true">
+    <div class="hud-block">
+      <div class="hud-block-label">// LOCATION</div>
+      <div class="hud-block-line">LAT 53.7457° N</div>
+      <div class="hud-block-line">LON 00.3367° W</div>
+      <div class="hud-block-line">ALT 25 M · HULL</div>
+    </div>
+    <div class="hud-block">
+      <div class="hud-block-label">// SESSION</div>
+      <div class="hud-block-line" id="hud-session">SHL-XXXX</div>
+      <div class="hud-block-line" id="hud-uptime">UP 00:00:00</div>
+    </div>
+  </aside>
+
+  <aside class="hud-side hud-right" aria-hidden="true">
+    <div class="hud-block">
+      <div class="hud-block-label">SYSTEMS //</div>
+      <div class="hud-block-line">NEURAL · <span class="hud-ok">ONLINE</span></div>
+      <div class="hud-block-line">STT · <span class="hud-ok">READY</span></div>
+      <div class="hud-block-line">TTS · <span class="hud-ok">READY</span></div>
+      <div class="hud-block-line">MIC · <span class="hud-ok">ACTIVE</span></div>
+    </div>
+    <div class="hud-block">
+      <div class="hud-block-label">REACTOR //</div>
+      <div class="hud-block-line">CORE 97.4%</div>
+      <div class="hud-block-line">FLUX 0.018 mV</div>
+    </div>
+  </aside>
 
   <div class="scene">
     <div class="topbar">
@@ -693,6 +797,20 @@
         container.appendChild(s);
       }
     })();
+
+    // HUD session ID + live uptime in the left side panel.
+    const sessionId = "SHL-" + Math.random().toString(16).slice(2, 6).toUpperCase();
+    document.getElementById("hud-session").textContent = sessionId;
+    const bootAt = Date.now();
+    function tickUptime() {
+      const s = Math.floor((Date.now() - bootAt) / 1000);
+      const hh = String(Math.floor(s / 3600)).padStart(2, "0");
+      const mm = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+      const ss = String(s % 60).padStart(2, "0");
+      document.getElementById("hud-uptime").textContent = "UP " + hh + ":" + mm + ":" + ss;
+    }
+    tickUptime();
+    setInterval(tickUptime, 1000);
 
     // Clock
     function tick() {
