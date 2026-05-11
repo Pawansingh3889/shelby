@@ -1,7 +1,7 @@
 import anyio
 
 from .brain import Brain
-from .voice import Recorder, speak, transcribe
+from .voice import Recorder, speak_async, transcribe
 
 
 async def _loop() -> None:
@@ -45,7 +45,7 @@ async def _loop() -> None:
                 continue
 
             print(f"jarvis> {reply}")
-            speak(reply)
+            await speak_async(reply)
 
 
 def run() -> None:

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import io
+import os
 from typing import Optional
 
+import av
+import edge_tts
 import numpy as np
 import pyttsx3
 import sounddevice as sd
@@ -11,7 +15,9 @@ from faster_whisper import WhisperModel
 SAMPLE_RATE = 16000
 CHANNELS = 1
 DTYPE = "int16"
-DEFAULT_STT_MODEL = "tiny.en"
+DEFAULT_STT_MODEL = os.environ.get("JARVIS_STT_MODEL", "tiny.en")
+DEFAULT_TTS_VOICE = os.environ.get("JARVIS_TTS_VOICE", "en-GB-SoniaNeural")
+DEFAULT_TTS_RATE = os.environ.get("JARVIS_TTS_RATE", "+10%")
 
 
 _stt: Optional[WhisperModel] = None
@@ -34,13 +40,56 @@ def transcribe(audio: np.ndarray) -> str:
     return " ".join(s.text.strip() for s in segments).strip()
 
 
-def speak(text: str, rate: int = 185) -> None:
+async def _edge_tts_to_pcm(text: str, voice: str, rate: str) -> tuple[np.ndarray, int]:
+    communicate = edge_tts.Communicate(text, voice, rate=rate)
+    mp3_bytes = bytearray()
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            mp3_bytes.extend(chunk["data"])
+
+    container = av.open(io.BytesIO(bytes(mp3_bytes)))
+    stream = container.streams.audio[0]
+    sample_rate = stream.codec_context.sample_rate
+
+    frames = []
+    for frame in container.decode(stream):
+        arr = frame.to_ndarray()
+        if arr.ndim > 1:
+            arr = arr.mean(axis=0)
+        frames.append(arr)
+
+    pcm = np.concatenate(frames).astype(np.float32)
+    if np.issubdtype(pcm.dtype, np.integer):
+        pcm = pcm / np.iinfo(pcm.dtype).max
+    elif pcm.max() > 1.0:
+        pcm = pcm / 32768.0
+
+    return pcm, sample_rate
+
+
+async def speak_async(text: str, voice: str = DEFAULT_TTS_VOICE, rate: str = DEFAULT_TTS_RATE) -> None:
     if not text.strip():
         return
+    try:
+        pcm, sr = await _edge_tts_to_pcm(text, voice, rate)
+        sd.play(pcm, sr)
+        sd.wait()
+        return
+    except Exception as exc:
+        print(f"[edge-tts failed, falling back to SAPI: {exc}]", flush=True)
+        _speak_sapi(text)
+
+
+def _speak_sapi(text: str, rate: int = 185) -> None:
     engine = pyttsx3.init()
     engine.setProperty("rate", rate)
     engine.say(text)
     engine.runAndWait()
+
+
+def speak(text: str) -> None:
+    import anyio
+    anyio.run(speak_async, text)
 
 
 class Recorder:
