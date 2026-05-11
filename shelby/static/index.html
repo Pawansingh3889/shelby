@@ -270,6 +270,46 @@
       55% { transform: scale(0.98); }
       80% { transform: scale(1.03); }
     }
+    /* Particle trail emanating from the orb during speak */
+    .particles {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 400ms ease;
+    }
+    body[data-state="speaking"] .particles { opacity: 1; }
+    .particles .particle {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--speak);
+      box-shadow: 0 0 8px var(--speak-glow);
+      transform: translate(-50%, -50%);
+      animation: particle-drift 2.4s ease-out infinite;
+    }
+    .particles .particle:nth-child(1) { --tx:  120px; --ty: -90px;  animation-delay: 0.0s; }
+    .particles .particle:nth-child(2) { --tx: -110px; --ty: -100px; animation-delay: 0.3s; }
+    .particles .particle:nth-child(3) { --tx:  100px; --ty:  110px; animation-delay: 0.6s; }
+    .particles .particle:nth-child(4) { --tx: -130px; --ty:   80px; animation-delay: 0.9s; }
+    .particles .particle:nth-child(5) { --tx:   60px; --ty: -140px; animation-delay: 1.2s; }
+    .particles .particle:nth-child(6) { --tx:  -80px; --ty:  130px; animation-delay: 1.5s; }
+    .particles .particle:nth-child(7) { --tx:  150px; --ty:   30px; animation-delay: 1.8s; }
+    .particles .particle:nth-child(8) { --tx: -140px; --ty:  -20px; animation-delay: 2.1s; }
+    @keyframes particle-drift {
+      0% {
+        transform: translate(-50%, -50%) scale(0.6);
+        opacity: 0;
+      }
+      15% { opacity: 0.9; }
+      100% {
+        transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0.2);
+        opacity: 0;
+      }
+    }
     /* Audio-reactive bars (visible during speak) */
     .bars {
       display: flex;
@@ -419,6 +459,12 @@
           <div class="ring"></div>
           <div class="ring"></div>
           <div class="orb"></div>
+          <div class="particles">
+            <div class="particle"></div><div class="particle"></div>
+            <div class="particle"></div><div class="particle"></div>
+            <div class="particle"></div><div class="particle"></div>
+            <div class="particle"></div><div class="particle"></div>
+          </div>
         </div>
       </div>
       <div class="bars">
