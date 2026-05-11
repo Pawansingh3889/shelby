@@ -13,6 +13,7 @@ dependencies = [
   "pyttsx3>=2.99",
   "edge-tts>=7.2",
   "av>=17.0",
+  "webrtcvad-wheels>=2.0",
 ]
 
 [project.scripts]
