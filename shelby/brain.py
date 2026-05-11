@@ -418,7 +418,19 @@ SYSTEM_PROMPT = (
 )
 
 
-class Brain:
+class ClaudeBrain:
+    """Online brain backed by Claude via the Agent SDK and Max OAuth.
+
+    The original `Brain` name remains as a module-level alias for
+    backward compatibility with anything still importing it directly.
+    For new code, prefer ClaudeBrain (explicit) or HybridBrain
+    (auto-routing with Ollama fallback) from brain_hybrid.
+    """
+
+    # Exposed for HybridBrain so it can announce mode + persona.
+    name = "Shelby"
+    mode = "online"
+
     def __init__(self, extra_mcp_servers: Optional[dict] = None) -> None:
         # Force Claude Code to use Max OAuth, never the metered API path.
         os.environ.pop("ANTHROPIC_API_KEY", None)
@@ -520,3 +532,7 @@ class Brain:
             if event.get("type") == "text":
                 parts.append(event.get("text", ""))
         return "".join(parts).strip()
+
+
+# Backward-compat alias. Old code does .
+Brain = ClaudeBrain
