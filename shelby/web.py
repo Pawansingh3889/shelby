@@ -55,8 +55,22 @@ def publish(
             pass
 
 
+_STATIC = Path(__file__).parent / "static"
+
+
 async def _homepage(request):
-    return FileResponse(Path(__file__).parent / "static" / "index.html")
+    return FileResponse(_STATIC / "index.html")
+
+
+async def _manifest(request):
+    return FileResponse(
+        _STATIC / "manifest.webmanifest",
+        media_type="application/manifest+json",
+    )
+
+
+async def _icon(request):
+    return FileResponse(_STATIC / "icon.svg", media_type="image/svg+xml")
 
 
 async def _wake(request):
@@ -118,5 +132,7 @@ app = Starlette(
         Route("/events", _events),
         Route("/wake", _wake, methods=["POST"]),
         Route("/stats", _stats),
+        Route("/manifest.webmanifest", _manifest),
+        Route("/icon.svg", _icon),
     ]
 )

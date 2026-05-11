@@ -1,0 +1,20 @@
+{
+  "name": "Shelby — Personal Tactical Assistant",
+  "short_name": "Shelby",
+  "description": "Voice-first personal assistant for Captain PKT.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#030308",
+  "theme_color": "#22d3ee",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
