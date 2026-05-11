@@ -3,7 +3,7 @@ import platform
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import AsyncIterator, Optional
 
 import httpx
 
@@ -15,6 +15,11 @@ from claude_agent_sdk import (
     create_sdk_mcp_server,
     tool,
 )
+
+try:
+    from claude_agent_sdk import StreamEvent  # type: ignore
+except ImportError:  # pragma: no cover
+    StreamEvent = None  # type: ignore
 
 
 GITHUB_USERNAME = os.environ.get("SHELBY_GITHUB_USERNAME", "Pawansingh3889")
@@ -281,15 +286,35 @@ class Brain:
             await self._client.__aexit__(exc_type, exc, tb)
             self._client = None
 
-    async def process(self, text: str) -> str:
+    async def process_stream(self, text: str) -> AsyncIterator[str]:
+        """Yield text deltas as Claude streams them back.
+
+        With include_partial_messages enabled on ClaudeAgentOptions, the SDK
+        emits StreamEvent objects whose 'event' dict carries Anthropic-style
+        streaming events. We only care about content_block_delta events of
+        type text_delta — each one carries a small slice of the final reply,
+        typically a token or two.
+
+        Callers can consume this incrementally for low-latency TTS, or use
+        process() which buffers everything into a single string.
+        """
         if self._client is None:
             raise RuntimeError("Brain must be used as an async context manager")
 
         await self._client.query(text)
-        chunks: list[str] = []
         async for msg in self._client.receive_response():
-            if isinstance(msg, AssistantMessage):
-                for block in msg.content:
-                    if isinstance(block, TextBlock):
-                        chunks.append(block.text)
-        return "".join(chunks).strip()
+            if StreamEvent is not None and isinstance(msg, StreamEvent):
+                event = getattr(msg, "event", None) or {}
+                if event.get("type") == "content_block_delta":
+                    delta = event.get("delta") or {}
+                    if delta.get("type") == "text_delta":
+                        chunk = delta.get("text", "")
+                        if chunk:
+                            yield chunk
+
+    async def process(self, text: str) -> str:
+        """Backward-compatible: collect the full reply as one string."""
+        parts: list[str] = []
+        async for chunk in self.process_stream(text):
+            parts.append(chunk)
+        return "".join(parts).strip()
