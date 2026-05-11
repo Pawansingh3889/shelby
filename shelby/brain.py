@@ -138,40 +138,41 @@ async def news_headlines(args):
     {},
 )
 async def github_pending(args):
+    import asyncio
+
     user = GITHUB_USERNAME
     headers = {"Accept": "application/vnd.github+json"}
     pat = os.environ.get("SHELBY_GITHUB_TOKEN")
     if pat:
         headers["Authorization"] = f"Bearer {pat}"
 
-    queries = {
-        "Open PRs you authored": f"is:pr is:open author:{user} archived:false",
-        "PRs awaiting your review": f"is:pr is:open review-requested:{user} archived:false",
-        "Issues assigned to you": f"is:issue is:open assignee:{user} archived:false",
-    }
+    queries = [
+        ("Open PRs you authored", f"is:pr is:open author:{user} archived:false"),
+        ("PRs awaiting your review", f"is:pr is:open review-requested:{user} archived:false"),
+        ("Issues assigned to you", f"is:issue is:open assignee:{user} archived:false"),
+    ]
 
-    sections = []
+    async def _one(client: httpx.AsyncClient, label: str, q: str) -> str:
+        r = await client.get(
+            "https://api.github.com/search/issues",
+            params={"q": q, "per_page": 10},
+            headers=headers,
+        )
+        if r.status_code != 200:
+            return f"{label}: lookup failed ({r.status_code})"
+        data = r.json()
+        count = data.get("total_count", 0)
+        if count == 0:
+            return f"{label}: 0"
+        lines = [f"{label}: {count}"]
+        for item in data.get("items", [])[:5]:
+            parts = item["repository_url"].rsplit("/", 2)[-2:]
+            repo = "/".join(parts)
+            lines.append(f"  - {repo}#{item['number']}: {item['title']}")
+        return "\n".join(lines)
+
     async with httpx.AsyncClient(timeout=15.0) as client:
-        for label, q in queries.items():
-            r = await client.get(
-                "https://api.github.com/search/issues",
-                params={"q": q, "per_page": 10},
-                headers=headers,
-            )
-            if r.status_code != 200:
-                sections.append(f"{label}: lookup failed ({r.status_code})")
-                continue
-            data = r.json()
-            count = data.get("total_count", 0)
-            if count == 0:
-                sections.append(f"{label}: 0")
-                continue
-            lines = [f"{label}: {count}"]
-            for item in data.get("items", [])[:5]:
-                parts = item["repository_url"].rsplit("/", 2)[-2:]
-                repo = "/".join(parts)
-                lines.append(f"  - {repo}#{item['number']}: {item['title']}")
-            sections.append("\n".join(lines))
+        sections = await asyncio.gather(*(_one(client, label, q) for label, q in queries))
 
     return {"content": [{"type": "text", "text": "\n\n".join(sections)}]}
 
