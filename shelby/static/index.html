@@ -504,7 +504,16 @@
       color: rgba(245, 247, 250, 0.95);
       white-space: pre-wrap;
       min-height: 120px;
+      max-height: 32vh;
+      overflow-y: auto;
       transition: opacity 300ms ease;
+      scrollbar-width: thin;
+      scrollbar-color: var(--dim) transparent;
+    }
+    .body::-webkit-scrollbar { width: 6px; }
+    .body::-webkit-scrollbar-thumb {
+      background: var(--dim);
+      border-radius: 3px;
     }
     /* Word-by-word highlight during speaking */
     .body .word {
@@ -774,12 +783,26 @@
       bodyEl.textContent = text || "";
     }
 
-    function renderSpokenWords(text, words) {
-      // Build span-per-word DOM from the full text + edge-tts WordBoundary events.
-      // Walk the text left to right, matching each word entry to its first occurrence
-      // from the current cursor position. Non-word characters (commas, spaces,
-      // punctuation) become plain text nodes between spans.
-      bodyEl.innerHTML = "";
+    function renderSpokenWords(text, words, append) {
+      // Build span-per-word DOM from the chunk text + edge-tts WordBoundary
+      // events. When append is true, mark all currently-active words as
+      // 'spoken' and append the new chunk's spans without clearing existing
+      // ones. When append is false, replace the body entirely.
+      if (!append) {
+        bodyEl.innerHTML = "";
+      } else {
+        // Promote any still-active words from the previous chunk to 'spoken'
+        // so they settle to soft white rather than being stuck mid-highlight.
+        bodyEl.querySelectorAll(".word.active").forEach(w => {
+          w.classList.remove("active");
+          w.classList.add("spoken");
+        });
+        // Add a leading space between chunks so words don't collide.
+        if (bodyEl.lastChild) {
+          bodyEl.appendChild(document.createTextNode(" "));
+        }
+      }
+
       const spans = [];
       let cursor = 0;
       for (const w of words) {
@@ -799,11 +822,15 @@
         bodyEl.appendChild(document.createTextNode(text.slice(cursor)));
       }
 
-      // Schedule highlight on each word from now. Small lead-time (60ms) so the
-      // visible cue arrives just before the audio. Mark spoken once duration passes.
+      // If no word boundaries, just show the text without highlight scheduling
+      // (e.g. SAPI fallback path or chunks shorter than one word boundary).
+      if (spans.length === 0) return;
+
+      // Schedule highlight on each word from now. Small lead-time so the
+      // visible cue arrives just before the audio. Mark spoken once duration
+      // passes. Per-chunk timers are appended to the existing list so a state
+      // change clears everything together.
       const lead = 60;
-      const start = performance.now();
-      clearWordTimers();
       for (const { span, offset, duration } of spans) {
         const tOn = Math.max(0, offset - lead);
         const tOff = offset + duration;
@@ -815,6 +842,9 @@
           span.classList.add("spoken");
         }, tOff));
       }
+
+      // Auto-scroll the body if the chunked reply has overflowed.
+      bodyEl.scrollTop = bodyEl.scrollHeight;
     }
 
     function update(data) {
@@ -859,9 +889,17 @@
 
       if (data.state === "speaking" && Array.isArray(data.words) && data.words.length > 0) {
         // Render and schedule highlights immediately, no fade — the fade would
-        // delay the visual highlights and break sync with audio.
+        // delay the visual highlights and break sync with audio. Append flag
+        // (set by server on every chunk after the first in a streamed reply)
+        // means the body accumulates instead of replacing.
         bodyEl.style.opacity = "1";
-        renderSpokenWords(data.text || "", data.words);
+        renderSpokenWords(data.text || "", data.words, !!data.append);
+      } else if (data.state === "speaking" && data.append) {
+        // Streamed chunk without words (SAPI fallback). Append plain text.
+        bodyEl.style.opacity = "1";
+        if (bodyEl.lastChild) bodyEl.appendChild(document.createTextNode(" "));
+        bodyEl.appendChild(document.createTextNode(data.text || ""));
+        bodyEl.scrollTop = bodyEl.scrollHeight;
       } else {
         bodyEl.style.opacity = "0";
         setTimeout(() => {
