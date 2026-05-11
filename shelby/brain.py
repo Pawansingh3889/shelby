@@ -44,6 +44,8 @@ try:
 except ImportError:  # pragma: no cover
     StreamEvent = None  # type: ignore
 
+from . import timers
+
 
 GITHUB_USERNAME = os.environ.get("SHELBY_GITHUB_USERNAME", "Pawansingh3889")
 DEFAULT_LOCATION = os.environ.get("SHELBY_LOCATION", "Hull")
@@ -216,6 +218,68 @@ async def github_pending(args):
     return {"content": [{"type": "text", "text": text}]}
 
 
+@tool(
+    "set_timer",
+    "Set a timer / reminder. Pass duration in seconds and a short spoken "
+    "message for Captain. Examples: seconds=1200 message='check the oven', "
+    "seconds=300 message='leave for the train'. Convert spoken durations to "
+    "seconds before calling: '20 minutes' -> 1200, 'two and a half hours' "
+    "-> 9000, '90 seconds' -> 90.",
+    {"seconds": int, "message": str},
+)
+async def set_timer(args):
+    seconds = int(args.get("seconds") or 0)
+    if seconds < 1:
+        return {"content": [{"type": "text", "text": "duration must be at least 1 second"}]}
+    message = (args.get("message") or "").strip() or "timer"
+    t = timers.schedule(seconds, message)
+    pretty = timers.fmt_remaining(t)
+    text = f"timer set for {pretty}: '{message}' (id {t.id})"
+    return {"content": [{"type": "text", "text": text}]}
+
+
+@tool(
+    "list_timers",
+    "List all active timers Captain has running, with the time remaining on "
+    "each. Use this when Captain asks 'what timers do I have', 'what's "
+    "pending', or to know what to cancel.",
+    {},
+)
+async def list_timers(args):
+    active = timers.all_active()
+    if not active:
+        return {"content": [{"type": "text", "text": "no active timers"}]}
+    lines = [
+        f"- {t.message} (id {t.id}, {timers.fmt_remaining(t)} remaining)"
+        for t in active
+    ]
+    return {"content": [{"type": "text", "text": "\n".join(lines)}]}
+
+
+@tool(
+    "cancel_timer",
+    "Cancel a running timer by id or by a substring of its message. "
+    "Pass timer_id (preferred) or match (e.g. 'oven' to cancel the "
+    "'check the oven' timer).",
+    {"timer_id": int, "match": str},
+)
+async def cancel_timer(args):
+    tid = args.get("timer_id")
+    match = (args.get("match") or "").strip()
+    if tid:
+        t = timers.cancel(int(tid))
+        if t is None:
+            return {"content": [{"type": "text", "text": f"no timer with id {tid}"}]}
+        return {"content": [{"type": "text", "text": f"cancelled timer {t.id} ('{t.message}')"}]}
+    if match:
+        gone = timers.cancel_by_match(match)
+        if not gone:
+            return {"content": [{"type": "text", "text": f"no timer matched '{match}'"}]}
+        names = ", ".join(t.message for t in gone)
+        return {"content": [{"type": "text", "text": f"cancelled {len(gone)} timer(s): {names}"}]}
+    return {"content": [{"type": "text", "text": "pass timer_id or match"}]}
+
+
 def _detect_system_claude_cli() -> Optional[Path]:
     explicit = os.environ.get("CLAUDE_AGENT_CLI_PATH")
     if explicit:
@@ -296,6 +360,18 @@ SYSTEM_PROMPT = (
     "matching tool rather than guessing. For single-tool questions, skip the acknowledgement "
     "and just answer. Never narrate what you are about to do for trivial replies, just answer.\n"
     "\n"
+    "TIMER INTENT — when Captain says 'remind me in X to Y', 'set a timer for X', "
+    "'wake me in X minutes' or similar:\n"
+    "1. Convert the spoken duration to seconds. '20 minutes' -> 1200, 'an hour' -> 3600, "
+    "'90 seconds' -> 90, 'two and a half hours' -> 9000. Strip filler words from the "
+    "message ('to check the oven' -> 'check the oven').\n"
+    "2. Call set_timer(seconds=N, message='short reminder'). Confirm in one short "
+    "sentence: 'Timer set for 20 minutes Captain' (no need to repeat the reminder text "
+    "verbatim, Shelby will say it when the timer fires).\n"
+    "3. If Captain asks what timers are pending, call list_timers and read them out "
+    "conversationally. If Captain says 'cancel the oven timer', call "
+    "cancel_timer(match='oven').\n"
+    "\n"
     "WEB SEARCH — when Captain asks about restaurants, places, businesses, events, prices, "
     "live facts, anything time-sensitive that isn't covered by the named tools, use the "
     "WebSearch tool. Default location context is Hull, UK unless Captain specifies otherwise. "
@@ -314,7 +390,11 @@ class Brain:
         local = create_sdk_mcp_server(
             name="shelby-tools",
             version="0.1.0",
-            tools=[current_time, system_info, weather, forecast, news_headlines, github_pending],
+            tools=[
+                current_time, system_info, weather, forecast,
+                news_headlines, github_pending,
+                set_timer, list_timers, cancel_timer,
+            ],
         )
         servers = {"shelby": local}
         if extra_mcp_servers:
@@ -330,6 +410,9 @@ class Brain:
                 "mcp__shelby__forecast",
                 "mcp__shelby__news_headlines",
                 "mcp__shelby__github_pending",
+                "mcp__shelby__set_timer",
+                "mcp__shelby__list_timers",
+                "mcp__shelby__cancel_timer",
                 "mcp__claude_ai_Gmail__search_threads",
                 "mcp__claude_ai_Gmail__get_thread",
                 "mcp__claude_ai_Google_Calendar__list_events",

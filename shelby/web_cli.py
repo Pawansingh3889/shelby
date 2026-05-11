@@ -12,8 +12,15 @@ import uvicorn
 
 from .ambient import get_wake_model, record_until_silence, wait_for_wake
 from .brain import Brain
+from . import timers
 from .voice import speak_async, strip_markdown_for_speech, transcribe, warmup_stt, warmup_tts
 from .web import app, publish
+
+
+# Single audio lock shared between the conversation TTS path and the
+# background timer announcer. Timers wait for the current turn to finish
+# before chiming so we never overlap two audio streams.
+AUDIO_LOCK = asyncio.Lock()
 
 
 HOST = os.environ.get("SHELBY_WEB_HOST", "127.0.0.1")
@@ -34,6 +41,9 @@ _TOOL_LABELS = {
     "forecast": "Pulling forecast",
     "news_headlines": "Reading the news",
     "github_pending": "Sweeping GitHub",
+    "set_timer": "Setting timer",
+    "list_timers": "Checking timers",
+    "cancel_timer": "Cancelling timer",
     "search_threads": "Sweeping inbox",
     "get_thread": "Reading email",
     "list_events": "Checking calendar",
@@ -140,13 +150,27 @@ async def _stream_speak(brain: Brain, prompt: str) -> str:
                 )
 
             try:
-                await speak_async(chunk_text, on_start=_on_start)
+                async with AUDIO_LOCK:
+                    await speak_async(chunk_text, on_start=_on_start)
             except Exception as exc:
                 print(f"[tts error: {exc}]", flush=True)
             first = False
 
     await asyncio.gather(producer(), consumer())
     return " ".join(full_reply).strip()
+
+
+async def _announce_timer(t: timers.Timer) -> None:
+    """Speak a fired timer's message. Waits for the audio lock so it never
+    overlaps with the current conversation turn."""
+    line = f"Captain, your timer is up. {t.message}."
+    print(f"[timer {t.id} fired]> {line}", flush=True)
+    async with AUDIO_LOCK:
+        publish("speaking", text=line, doing="")
+        try:
+            await speak_async(strip_markdown_for_speech(line))
+        except Exception as exc:
+            print(f"[timer tts error: {exc}]", flush=True)
 
 
 async def _loop() -> None:
@@ -162,20 +186,26 @@ async def _loop() -> None:
     print("[ready, listening for 'hey jarvis']\n", flush=True)
     publish("idle", text="Say 'hey jarvis' to start.")
 
+    # Background timer watcher: polls every second, fires reminders via
+    # _announce_timer which serialises on AUDIO_LOCK against active TTS.
+    timer_task = asyncio.create_task(timers.watch_loop(_announce_timer))
+
     async with Brain() as brain:
         try:
             while True:
-                wait_for_wake()
+                # Run the blocking sync wake/record calls in a thread so the
+                # event loop stays free for the timer watcher.
+                await asyncio.to_thread(wait_for_wake)
                 publish("listening")
                 print("> wake detected, listening...", flush=True)
-                audio = record_until_silence()
+                audio = await asyncio.to_thread(record_until_silence)
 
                 while True:
                     if audio.size == 0:
                         print("(no audio)", flush=True)
                         break
 
-                    text = transcribe(audio)
+                    text = await asyncio.to_thread(transcribe, audio)
                     if not text:
                         print("(no speech detected)", flush=True)
                         break
@@ -193,7 +223,9 @@ async def _loop() -> None:
                     print(f"shelby> {reply}", flush=True)
 
                     publish("listening", text="follow-up?")
-                    audio = record_until_silence(max_pre_speech_ms=follow_up_window_ms)
+                    audio = await asyncio.to_thread(
+                        record_until_silence, follow_up_window_ms
+                    )
                     if audio.size == 0:
                         print("(no follow-up)", flush=True)
                         break
@@ -203,6 +235,8 @@ async def _loop() -> None:
         except KeyboardInterrupt:
             publish("idle", text="shutting down")
             print("\n[shutting down]")
+        finally:
+            timer_task.cancel()
 
 
 def run() -> None:
