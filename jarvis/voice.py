@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
+import pyttsx3
 import sounddevice as sd
 from faster_whisper import WhisperModel
 
@@ -31,6 +32,15 @@ def transcribe(audio: np.ndarray) -> str:
     audio_f32 = audio.astype(np.float32) / 32768.0
     segments, _ = model.transcribe(audio_f32, beam_size=1, vad_filter=True)
     return " ".join(s.text.strip() for s in segments).strip()
+
+
+def speak(text: str, rate: int = 185) -> None:
+    if not text.strip():
+        return
+    engine = pyttsx3.init()
+    engine.setProperty("rate", rate)
+    engine.say(text)
+    engine.runAndWait()
 
 
 class Recorder:
