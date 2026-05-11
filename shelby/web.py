@@ -15,10 +15,24 @@ _subscribers: list[asyncio.Queue] = []
 _last_payload: dict = {"state": "idle", "text": ""}
 
 
-def publish(state: str, text: Optional[str] = None, words: Optional[list] = None) -> None:
-    payload = {"state": state, "text": text or "", "words": words or []}
+def publish(
+    state: str,
+    text: Optional[str] = None,
+    words: Optional[list] = None,
+    append: bool = False,
+) -> None:
+    payload = {
+        "state": state,
+        "text": text or "",
+        "words": words or [],
+        "append": bool(append),
+    }
     global _last_payload
-    _last_payload = payload
+    # Late-joiners shouldn't see append payloads in isolation, so we never
+    # store an append=True payload as the 'last' state. The fully-assembled
+    # text gets sent by the speak loop when the chunk completes anyway.
+    if not append:
+        _last_payload = payload
     msg = json.dumps(payload)
     for q in _subscribers:
         try:
