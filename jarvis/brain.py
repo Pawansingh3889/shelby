@@ -1,5 +1,6 @@
 import os
 import platform
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -51,6 +52,23 @@ async def weather(args):
     return {"content": [{"type": "text", "text": text}]}
 
 
+@tool(
+    "news_headlines",
+    "Get the top N general news headlines from BBC News. Pass count to limit, default 5.",
+    {"count": int},
+)
+async def news_headlines(args):
+    count = max(1, min(int(args.get("count") or 5), 15))
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.get("https://feeds.bbci.co.uk/news/rss.xml")
+    if r.status_code != 200:
+        return {"content": [{"type": "text", "text": f"news lookup failed ({r.status_code})"}]}
+    root = ET.fromstring(r.text)
+    titles = [item.findtext("title", "") for item in root.findall(".//item")][:count]
+    text = "\n".join(f"- {t}" for t in titles if t) or "no headlines"
+    return {"content": [{"type": "text", "text": text}]}
+
+
 def _detect_system_claude_cli() -> Optional[Path]:
     explicit = os.environ.get("CLAUDE_AGENT_CLI_PATH")
     if explicit:
@@ -79,7 +97,7 @@ class Brain:
         local = create_sdk_mcp_server(
             name="jarvis-tools",
             version="0.1.0",
-            tools=[current_time, system_info, weather],
+            tools=[current_time, system_info, weather, news_headlines],
         )
         servers = {"jarvis": local}
         if extra_mcp_servers:
@@ -92,6 +110,7 @@ class Brain:
                 "mcp__jarvis__current_time",
                 "mcp__jarvis__system_info",
                 "mcp__jarvis__weather",
+                "mcp__jarvis__news_headlines",
             ],
             cli_path=cli_path,
         )
