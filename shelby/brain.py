@@ -285,7 +285,14 @@ SYSTEM_PROMPT = (
     "\n"
     "When Captain asks about time, this computer, weather, news, GitHub or email, call the "
     "matching tool rather than guessing. For single-tool questions, skip the acknowledgement "
-    "and just answer. Never narrate what you are about to do for trivial replies, just answer."
+    "and just answer. Never narrate what you are about to do for trivial replies, just answer.\n"
+    "\n"
+    "WEB SEARCH — when Captain asks about restaurants, places, businesses, events, prices, "
+    "live facts, anything time-sensitive that isn't covered by the named tools, use the "
+    "WebSearch tool. Default location context is Hull, UK unless Captain specifies otherwise. "
+    "Pick a couple of the best results and summarise them in one or two short sentences "
+    "suitable for being spoken aloud. Avoid reading long lists; offer the top option plus "
+    "one alternative and ask if Captain wants more detail."
 )
 
 
@@ -318,6 +325,8 @@ class Brain:
                 "mcp__claude_ai_Gmail__get_thread",
                 "mcp__claude_ai_Google_Calendar__list_events",
                 "mcp__claude_ai_Google_Calendar__list_calendars",
+                "WebSearch",
+                "WebFetch",
             ],
             disallowed_tools=["Bash", "Edit", "Write", "Read"],
             system_prompt=SYSTEM_PROMPT,
@@ -338,35 +347,44 @@ class Brain:
             await self._client.__aexit__(exc_type, exc, tb)
             self._client = None
 
-    async def process_stream(self, text: str) -> AsyncIterator[str]:
-        """Yield text deltas as Claude streams them back.
+    async def process_stream(self, text: str) -> AsyncIterator[dict]:
+        """Yield typed events as Claude streams them back.
 
-        With include_partial_messages enabled on ClaudeAgentOptions, the SDK
-        emits StreamEvent objects whose 'event' dict carries Anthropic-style
-        streaming events. We only care about content_block_delta events of
-        type text_delta — each one carries a small slice of the final reply,
-        typically a token or two.
+        Each event is a dict with a 'type' field:
+          - {"type": "text", "text": "..."}      a text token/delta
+          - {"type": "tool", "name": "..."}      a tool_use block starting
 
-        Callers can consume this incrementally for low-latency TTS, or use
-        process() which buffers everything into a single string.
+        With include_partial_messages enabled, the SDK emits StreamEvent
+        objects whose 'event' dict carries Anthropic-style streaming events.
+        We surface text_delta and tool_use block starts so callers can drive
+        both TTS and a live "what's Shelby doing" status pill.
         """
         if self._client is None:
             raise RuntimeError("Brain must be used as an async context manager")
 
         await self._client.query(text)
         async for msg in self._client.receive_response():
-            if StreamEvent is not None and isinstance(msg, StreamEvent):
-                event = getattr(msg, "event", None) or {}
-                if event.get("type") == "content_block_delta":
-                    delta = event.get("delta") or {}
-                    if delta.get("type") == "text_delta":
-                        chunk = delta.get("text", "")
-                        if chunk:
-                            yield chunk
+            if StreamEvent is None or not isinstance(msg, StreamEvent):
+                continue
+            event = getattr(msg, "event", None) or {}
+            etype = event.get("type")
+            if etype == "content_block_delta":
+                delta = event.get("delta") or {}
+                if delta.get("type") == "text_delta":
+                    chunk = delta.get("text", "")
+                    if chunk:
+                        yield {"type": "text", "text": chunk}
+            elif etype == "content_block_start":
+                block = event.get("content_block") or {}
+                if block.get("type") == "tool_use":
+                    name = block.get("name") or ""
+                    if name:
+                        yield {"type": "tool", "name": name}
 
     async def process(self, text: str) -> str:
-        """Backward-compatible: collect the full reply as one string."""
+        """Backward-compatible: collect the full text reply as one string."""
         parts: list[str] = []
-        async for chunk in self.process_stream(text):
-            parts.append(chunk)
+        async for event in self.process_stream(text):
+            if event.get("type") == "text":
+                parts.append(event.get("text", ""))
         return "".join(parts).strip()
