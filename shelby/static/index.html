@@ -288,6 +288,86 @@
       55% { transform: scale(0.98); }
       80% { transform: scale(1.03); }
     }
+    /* Transcript modal (press 't'). Full conversation log with timestamps,
+       scrollable. Click backdrop or press Esc to close. */
+    .transcript-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 3, 8, 0.78);
+      backdrop-filter: blur(8px);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 200ms ease;
+    }
+    .transcript-backdrop.visible {
+      display: flex;
+      opacity: 1;
+    }
+    .transcript {
+      width: min(720px, 92vw);
+      max-height: 80vh;
+      background: var(--bg-2);
+      border: 1px solid var(--dim);
+      border-radius: 14px;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .transcript-header {
+      padding: 16px 22px;
+      border-bottom: 1px solid var(--dim);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .transcript-body {
+      padding: 18px 22px 22px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .transcript-turn {
+      margin-bottom: 18px;
+      line-height: 1.55;
+      font-size: 15px;
+    }
+    .transcript-turn .role {
+      display: inline-block;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      margin-right: 8px;
+      opacity: 0.85;
+    }
+    .transcript-turn.you .role { color: var(--listen); }
+    .transcript-turn.shelby .role { color: var(--speak); }
+    .transcript-empty {
+      color: var(--muted);
+      font-style: italic;
+      text-align: center;
+      padding: 32px 0;
+    }
+    .transcript-close {
+      background: transparent;
+      border: 1px solid var(--dim);
+      border-radius: 999px;
+      color: var(--muted);
+      padding: 4px 12px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      cursor: pointer;
+    }
+    .transcript-close:hover { color: var(--fg); border-color: var(--fg); }
     /* Click-to-wake button below the orb. Replaces saying 'Hey Jarvis' when
        typing's faster or when the mic is uncooperative. */
     .wake-btn {
@@ -551,6 +631,16 @@
 
   <div class="history" id="history"></div>
 
+  <div class="transcript-backdrop" id="transcript-backdrop">
+    <div class="transcript" role="dialog" aria-label="Full transcript">
+      <div class="transcript-header">
+        <span>transcript · press T or click outside to close</span>
+        <button class="transcript-close" id="transcript-close" type="button">close</button>
+      </div>
+      <div class="transcript-body" id="transcript-body"></div>
+    </div>
+  </div>
+
   <script>
     // Starfield
     (function makeStars() {
@@ -625,8 +715,17 @@
       wordTimers = [];
     }
 
+    // Full conversation log, capped at 100 turns to keep memory bounded.
+    // Each entry is {role, text, at} where at is a JS timestamp.
+    const transcript = [];
+    function recordTurn(role, text) {
+      transcript.push({ role, text, at: Date.now() });
+      while (transcript.length > 100) transcript.shift();
+    }
+
     function pushHistory(role, text) {
       if (!text) return;
+      recordTurn(role, text);
       const item = document.createElement("div");
       item.className = "history-item " + role;
       item.textContent = text.length > 120 ? text.slice(0, 117) + "…" : text;
@@ -636,6 +735,55 @@
         historyEl.removeChild(historyEl.lastChild);
       }
     }
+
+    function fmtTime(ts) {
+      const d = new Date(ts);
+      return String(d.getHours()).padStart(2, "0") + ":" +
+             String(d.getMinutes()).padStart(2, "0") + ":" +
+             String(d.getSeconds()).padStart(2, "0");
+    }
+    const transcriptBackdrop = document.getElementById("transcript-backdrop");
+    const transcriptBody = document.getElementById("transcript-body");
+    function openTranscript() {
+      transcriptBody.innerHTML = "";
+      if (transcript.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "transcript-empty";
+        empty.textContent = "No turns yet, Captain.";
+        transcriptBody.appendChild(empty);
+      } else {
+        for (const t of transcript) {
+          const turn = document.createElement("div");
+          turn.className = "transcript-turn " + t.role;
+          const role = document.createElement("span");
+          role.className = "role";
+          role.textContent = t.role + " · " + fmtTime(t.at);
+          turn.appendChild(role);
+          turn.appendChild(document.createTextNode(t.text));
+          transcriptBody.appendChild(turn);
+        }
+      }
+      transcriptBackdrop.classList.add("visible");
+    }
+    function closeTranscript() {
+      transcriptBackdrop.classList.remove("visible");
+    }
+    document.addEventListener("keydown", (e) => {
+      // Don't fire if the user's typing into an input/textarea (none yet, but
+      // future-proof) or if the modal is already open.
+      const tag = (e.target.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+      if (e.key === "t" || e.key === "T") {
+        if (transcriptBackdrop.classList.contains("visible")) closeTranscript();
+        else openTranscript();
+      } else if (e.key === "Escape") {
+        closeTranscript();
+      }
+    });
+    transcriptBackdrop.addEventListener("click", (e) => {
+      if (e.target === transcriptBackdrop) closeTranscript();
+    });
+    document.getElementById("transcript-close").addEventListener("click", closeTranscript);
 
     function renderPlain(text) {
       bodyEl.textContent = text || "";
