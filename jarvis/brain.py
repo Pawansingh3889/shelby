@@ -20,6 +20,18 @@ async def current_time(args):
     return {"content": [{"type": "text", "text": now}]}
 
 
+@tool("system_info", "Get OS, machine and Python info from this computer", {})
+async def system_info(args):
+    info = {
+        "os": f"{platform.system()} {platform.release()}",
+        "machine": platform.machine(),
+        "python": platform.python_version(),
+        "node": platform.node(),
+    }
+    text = "\n".join(f"{k}: {v}" for k, v in info.items())
+    return {"content": [{"type": "text", "text": text}]}
+
+
 def _detect_system_claude_cli() -> Optional[Path]:
     explicit = os.environ.get("CLAUDE_AGENT_CLI_PATH")
     if explicit:
@@ -48,7 +60,7 @@ class Brain:
         local = create_sdk_mcp_server(
             name="jarvis-tools",
             version="0.1.0",
-            tools=[current_time],
+            tools=[current_time, system_info],
         )
         servers = {"jarvis": local}
         if extra_mcp_servers:
@@ -57,7 +69,10 @@ class Brain:
         cli_path = _detect_system_claude_cli()
         self._options = ClaudeAgentOptions(
             mcp_servers=servers,
-            allowed_tools=["mcp__jarvis__current_time"],
+            allowed_tools=[
+                "mcp__jarvis__current_time",
+                "mcp__jarvis__system_info",
+            ],
             cli_path=cli_path,
         )
         self._client: Optional[ClaudeSDKClient] = None
