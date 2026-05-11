@@ -872,8 +872,9 @@
     </div>
     <div class="hud-block">
       <div class="hud-block-label">REACTOR //</div>
-      <div class="hud-block-line">CORE 97.4%</div>
-      <div class="hud-block-line">FLUX 0.018 mV</div>
+      <div class="hud-block-line" id="hud-cpu">CPU --%</div>
+      <div class="hud-block-line" id="hud-mem">MEM --%</div>
+      <div class="hud-block-line" id="hud-batt">BATT --%</div>
     </div>
   </aside>
 
@@ -1001,19 +1002,56 @@
       }
     })();
 
-    // HUD session ID + live uptime in the left side panel.
+    // HUD session ID + live uptime in the left side panel. Uptime tracks
+    // the page's load time as a fallback; the /stats poll below upgrades
+    // it to the server's actual process uptime so it survives reloads.
     const sessionId = "SHL-" + Math.random().toString(16).slice(2, 6).toUpperCase();
     document.getElementById("hud-session").textContent = sessionId;
+    let serverUptimeOffset = null; // seconds, set on first /stats response
     const bootAt = Date.now();
-    function tickUptime() {
-      const s = Math.floor((Date.now() - bootAt) / 1000);
+    function fmtUptime(s) {
       const hh = String(Math.floor(s / 3600)).padStart(2, "0");
       const mm = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
       const ss = String(s % 60).padStart(2, "0");
-      document.getElementById("hud-uptime").textContent = "UP " + hh + ":" + mm + ":" + ss;
+      return "UP " + hh + ":" + mm + ":" + ss;
+    }
+    function tickUptime() {
+      const localS = Math.floor((Date.now() - bootAt) / 1000);
+      const s = serverUptimeOffset !== null ? serverUptimeOffset + localS : localS;
+      document.getElementById("hud-uptime").textContent = fmtUptime(s);
     }
     tickUptime();
     setInterval(tickUptime, 1000);
+
+    // Live system stats: poll /stats every 2s and update the right HUD
+    // panel. Cheap (psutil reads are sub-ms server-side) and gives Captain
+    // a real readout instead of the placeholder reactor numbers.
+    async function pollStats() {
+      try {
+        const r = await fetch("/stats", { cache: "no-store" });
+        if (!r.ok) return;
+        const s = await r.json();
+        document.getElementById("hud-cpu").textContent =
+          "CPU " + s.cpu_pct.toFixed(0).padStart(2, "0") + "%";
+        document.getElementById("hud-mem").textContent =
+          "MEM " + s.mem_pct.toFixed(0).padStart(2, "0") + "% · " +
+          s.mem_used_gb.toFixed(1) + "G";
+        const battEl = document.getElementById("hud-batt");
+        if (s.battery_pct === null) {
+          battEl.textContent = "PWR · AC";
+        } else {
+          const plug = s.battery_plugged ? "⚡" : "·";
+          battEl.textContent = "BATT " + plug + " " + s.battery_pct.toFixed(0) + "%";
+        }
+        // First /stats response anchors the uptime ticker to the server.
+        if (serverUptimeOffset === null) {
+          serverUptimeOffset = s.uptime_s - Math.floor((Date.now() - bootAt) / 1000);
+          tickUptime();
+        }
+      } catch (_) {}
+    }
+    pollStats();
+    setInterval(pollStats, 2000);
 
     // Clock
     function tick() {
