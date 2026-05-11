@@ -172,6 +172,7 @@ class Brain:
                 "mcp__jarvis__news_headlines",
                 "mcp__jarvis__github_pending",
             ],
+            disallowed_tools=["Bash", "Edit", "Write", "Read"],
             system_prompt=SYSTEM_PROMPT,
             cli_path=cli_path,
             setting_sources=["user"],
