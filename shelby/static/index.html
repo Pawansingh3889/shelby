@@ -12,6 +12,8 @@
       --bg-1: #030308;
       --bg-2: #0a0e1a;
       --bg-3: #050511;
+      --tint-hue: 220;
+      --tint-strength: 0.06;
       --fg: #f5f7fa;
       --muted: #5b6478;
       --dim: #2a3042;
@@ -32,6 +34,22 @@
       font-family: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
       overflow: hidden;
       letter-spacing: 0.01em;
+      transition: background 1200ms ease;
+    }
+    /* Time-of-day tint layered over the base radial gradient. The hue and
+       strength are CSS variables set from JS based on local time. */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background: radial-gradient(
+        ellipse at 50% 30%,
+        hsla(var(--tint-hue), 70%, 50%, var(--tint-strength)) 0%,
+        transparent 70%
+      );
+      transition: background 1200ms ease;
     }
     /* Animated starfield */
     .stars {
@@ -534,6 +552,27 @@
     }
     tick();
     setInterval(tick, 1000);
+
+    // Time-of-day tint: cool blue overnight, warm amber at sunrise, neutral
+    // mid-day, deepening rose at sunset, cooler again into evening. Hue is in
+    // degrees on the HSL wheel. Strength fades up in twilight, down in noon.
+    function applyTimeTint() {
+      const h = new Date().getHours();
+      const m = new Date().getMinutes();
+      const t = h + m / 60;
+      let hue, strength;
+      if (t < 5)        { hue = 230; strength = 0.10; }  // deep night blue
+      else if (t < 8)   { hue =  20; strength = 0.14; }  // sunrise amber
+      else if (t < 11)  { hue =  45; strength = 0.06; }  // morning warm
+      else if (t < 16)  { hue = 210; strength = 0.04; }  // neutral day
+      else if (t < 19)  { hue =  18; strength = 0.10; }  // late afternoon
+      else if (t < 21)  { hue = 340; strength = 0.12; }  // sunset rose
+      else              { hue = 240; strength = 0.10; }  // night
+      document.documentElement.style.setProperty("--tint-hue", String(hue));
+      document.documentElement.style.setProperty("--tint-strength", String(strength));
+    }
+    applyTimeTint();
+    setInterval(applyTimeTint, 5 * 60 * 1000);
 
     // SSE
     const stateEl = document.getElementById("state");
