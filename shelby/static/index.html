@@ -471,26 +471,11 @@
     body[data-state="speaking"] .bars { opacity: 1; }
     .bar {
       width: 4px;
+      height: 8px;
       background: var(--speak);
       border-radius: 2px;
       box-shadow: 0 0 8px var(--speak-glow);
-      animation: bar-bounce 0.8s ease-in-out infinite;
-    }
-    .bar:nth-child(1) { animation-delay: 0.0s; height: 12px; }
-    .bar:nth-child(2) { animation-delay: 0.1s; height: 24px; }
-    .bar:nth-child(3) { animation-delay: 0.2s; height: 18px; }
-    .bar:nth-child(4) { animation-delay: 0.3s; height: 28px; }
-    .bar:nth-child(5) { animation-delay: 0.4s; height: 14px; }
-    .bar:nth-child(6) { animation-delay: 0.5s; height: 22px; }
-    .bar:nth-child(7) { animation-delay: 0.6s; height: 16px; }
-    .bar:nth-child(8) { animation-delay: 0.7s; height: 26px; }
-    .bar:nth-child(9) { animation-delay: 0.6s; height: 18px; }
-    .bar:nth-child(10) { animation-delay: 0.5s; height: 12px; }
-    .bar:nth-child(11) { animation-delay: 0.4s; height: 22px; }
-    .bar:nth-child(12) { animation-delay: 0.3s; height: 16px; }
-    @keyframes bar-bounce {
-      0%, 100% { transform: scaleY(0.4); }
-      50% { transform: scaleY(1); }
+      transition: height 140ms cubic-bezier(0.4, 0, 0.2, 1);
     }
     /* Bottom text */
     .text-pane {
@@ -850,6 +835,11 @@
       // Leaving the speaking state means any scheduled highlights are stale.
       if (prev === "speaking" && data.state !== "speaking") {
         clearWordTimers();
+        stopBars();
+      }
+      // Entering speaking state starts the audio-bar animation.
+      if (data.state === "speaking" && prev !== "speaking") {
+        startBars();
       }
 
       // Follow-up countdown ring: triggered when speaking transitions to
@@ -880,6 +870,32 @@
           bodyEl.style.opacity = "1";
         }, 200);
       }
+    }
+
+    // Audio bars: randomised heights driven from JS during speaking state.
+    // This is a pragmatic stand-in for a true browser-side audio analyser:
+    // the audio plays from server speakers, so the browser can't directly
+    // sample it without WebRTC routing. Random heights at ~120ms intervals
+    // read as "alive and reactive" without needing a real signal.
+    const bars = document.querySelectorAll(".bar");
+    let barsTimer = null;
+    function startBars() {
+      if (barsTimer) return;
+      const tick = () => {
+        bars.forEach((bar, i) => {
+          // Centre bars carry more energy than the edges, like a real EQ.
+          const dist = Math.abs(i - (bars.length - 1) / 2);
+          const energy = 1 - dist / (bars.length / 2);
+          const h = 6 + Math.random() * (10 + 22 * energy);
+          bar.style.height = h.toFixed(1) + "px";
+        });
+      };
+      tick();
+      barsTimer = setInterval(tick, 120);
+    }
+    function stopBars() {
+      if (barsTimer) { clearInterval(barsTimer); barsTimer = null; }
+      bars.forEach(bar => { bar.style.height = ""; });
     }
 
     // Click-to-wake: POSTs to /wake which sets the MANUAL_WAKE event
