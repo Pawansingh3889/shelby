@@ -1,5 +1,6 @@
 import os
 import platform
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -9,7 +10,14 @@ from claude_agent_sdk import (
     ClaudeSDKClient,
     TextBlock,
     create_sdk_mcp_server,
+    tool,
 )
+
+
+@tool("current_time", "Get the current local time on this computer", {})
+async def current_time(args):
+    now = datetime.now().astimezone().strftime("%A %d %B %Y, %H:%M:%S %Z").strip()
+    return {"content": [{"type": "text", "text": now}]}
 
 
 def _detect_system_claude_cli() -> Optional[Path]:
@@ -37,13 +45,19 @@ def _detect_system_claude_cli() -> Optional[Path]:
 
 class Brain:
     def __init__(self, extra_mcp_servers: Optional[dict] = None) -> None:
-        servers: dict = {}
+        local = create_sdk_mcp_server(
+            name="jarvis-tools",
+            version="0.1.0",
+            tools=[current_time],
+        )
+        servers = {"jarvis": local}
         if extra_mcp_servers:
             servers.update(extra_mcp_servers)
 
         cli_path = _detect_system_claude_cli()
         self._options = ClaudeAgentOptions(
             mcp_servers=servers,
+            allowed_tools=["mcp__jarvis__current_time"],
             cli_path=cli_path,
         )
         self._client: Optional[ClaudeSDKClient] = None
