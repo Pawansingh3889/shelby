@@ -273,6 +273,7 @@ class Brain:
             cli_path=cli_path,
             setting_sources=["user"],
             include_partial_messages=True,
+            model=os.environ.get("SHELBY_MODEL", "sonnet"),
         )
         self._client: Optional[ClaudeSDKClient] = None
 
