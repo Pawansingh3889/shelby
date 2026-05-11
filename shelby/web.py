@@ -15,8 +15,8 @@ _subscribers: list[asyncio.Queue] = []
 _last_payload: dict = {"state": "idle", "text": ""}
 
 
-def publish(state: str, text: Optional[str] = None) -> None:
-    payload = {"state": state, "text": text or ""}
+def publish(state: str, text: Optional[str] = None, words: Optional[list] = None) -> None:
+    payload = {"state": state, "text": text or "", "words": words or []}
     global _last_payload
     _last_payload = payload
     msg = json.dumps(payload)

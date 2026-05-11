@@ -64,8 +64,11 @@ async def _loop() -> None:
                         break
 
                     print(f"shelby> {reply}", flush=True)
-                    publish("speaking", text=reply)
-                    await speak_async(reply)
+
+                    async def _publish_with_words(words):
+                        publish("speaking", text=reply, words=words)
+
+                    await speak_async(reply, on_start=_publish_with_words)
 
                     publish("listening", text="follow-up?")
                     audio = record_until_silence(max_pre_speech_ms=follow_up_window_ms)

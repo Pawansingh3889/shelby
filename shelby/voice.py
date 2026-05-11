@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 import os
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 import av
 import edge_tts
@@ -10,6 +10,10 @@ import numpy as np
 import pyttsx3
 import sounddevice as sd
 from faster_whisper import WhisperModel
+
+
+WordEvent = dict  # {"text": str, "offset_ms": float, "duration_ms": float}
+OnSpeakStart = Callable[[list[WordEvent]], Awaitable[None]]
 
 
 SAMPLE_RATE = 16000
@@ -46,12 +50,19 @@ def transcribe(audio: np.ndarray) -> str:
     return " ".join(s.text.strip() for s in segments).strip()
 
 
-async def _edge_tts_to_pcm(text: str, voice: str, rate: str) -> tuple[np.ndarray, int]:
-    communicate = edge_tts.Communicate(text, voice, rate=rate)
+async def _edge_tts_to_pcm(text: str, voice: str, rate: str) -> tuple[np.ndarray, int, list[WordEvent]]:
+    communicate = edge_tts.Communicate(text, voice, rate=rate, boundary="WordBoundary")
     mp3_bytes = bytearray()
+    words: list[WordEvent] = []
     async for chunk in communicate.stream():
         if chunk["type"] == "audio":
             mp3_bytes.extend(chunk["data"])
+        elif chunk["type"] == "WordBoundary":
+            words.append({
+                "text": chunk["text"],
+                "offset_ms": chunk["offset"] / 10000.0,
+                "duration_ms": chunk["duration"] / 10000.0,
+            })
 
     container = av.open(io.BytesIO(bytes(mp3_bytes)))
     stream = container.streams.audio[0]
@@ -70,19 +81,31 @@ async def _edge_tts_to_pcm(text: str, voice: str, rate: str) -> tuple[np.ndarray
     elif pcm.max() > 1.0:
         pcm = pcm / 32768.0
 
-    return pcm, sample_rate
+    return pcm, sample_rate, words
 
 
-async def speak_async(text: str, voice: str = DEFAULT_TTS_VOICE, rate: str = DEFAULT_TTS_RATE) -> None:
+async def speak_async(
+    text: str,
+    voice: str = DEFAULT_TTS_VOICE,
+    rate: str = DEFAULT_TTS_RATE,
+    on_start: Optional[OnSpeakStart] = None,
+) -> None:
     if not text.strip():
         return
     try:
-        pcm, sr = await _edge_tts_to_pcm(text, voice, rate)
+        pcm, sr, words = await _edge_tts_to_pcm(text, voice, rate)
+        if on_start is not None:
+            await on_start(words)
         sd.play(pcm, sr)
         sd.wait()
         return
     except Exception as exc:
         print(f"[edge-tts failed, falling back to SAPI: {exc}]", flush=True)
+        if on_start is not None:
+            try:
+                await on_start([])
+            except Exception:
+                pass
         _speak_sapi(text)
 
 

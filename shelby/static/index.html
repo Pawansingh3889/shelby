@@ -334,6 +334,26 @@
       min-height: 120px;
       transition: opacity 300ms ease;
     }
+    /* Word-by-word highlight during speaking */
+    .body .word {
+      display: inline-block;
+      color: rgba(245, 247, 250, 0.32);
+      transition: color 180ms ease, text-shadow 180ms ease, transform 180ms ease;
+    }
+    .body .word.active {
+      color: var(--speak);
+      text-shadow: 0 0 14px var(--speak-glow), 0 0 28px rgba(251, 191, 36, 0.25);
+      transform: translateY(-1px);
+    }
+    .body .word.spoken {
+      color: rgba(245, 247, 250, 0.92);
+      text-shadow: none;
+      transform: none;
+    }
+    /* When not speaking, words show as plain text */
+    body:not([data-state="speaking"]) .body .word {
+      color: rgba(245, 247, 250, 0.95);
+    }
     /* History (older turns above current) */
     .history {
       position: fixed;
@@ -463,6 +483,12 @@
     let lastUserText = null;
     let lastShelbyText = null;
     let currentState = "idle";
+    let wordTimers = [];
+
+    function clearWordTimers() {
+      for (const t of wordTimers) clearTimeout(t);
+      wordTimers = [];
+    }
 
     function pushHistory(role, text) {
       if (!text) return;
@@ -471,9 +497,55 @@
       item.textContent = text.length > 120 ? text.slice(0, 117) + "…" : text;
       historyEl.insertBefore(item, historyEl.firstChild);
       requestAnimationFrame(() => item.classList.add("visible"));
-      // Cap at 4 items
       while (historyEl.children.length > 4) {
         historyEl.removeChild(historyEl.lastChild);
+      }
+    }
+
+    function renderPlain(text) {
+      bodyEl.textContent = text || "";
+    }
+
+    function renderSpokenWords(text, words) {
+      // Build span-per-word DOM from the full text + edge-tts WordBoundary events.
+      // Walk the text left to right, matching each word entry to its first occurrence
+      // from the current cursor position. Non-word characters (commas, spaces,
+      // punctuation) become plain text nodes between spans.
+      bodyEl.innerHTML = "";
+      const spans = [];
+      let cursor = 0;
+      for (const w of words) {
+        const idx = text.indexOf(w.text, cursor);
+        if (idx < 0) continue;
+        if (idx > cursor) {
+          bodyEl.appendChild(document.createTextNode(text.slice(cursor, idx)));
+        }
+        const span = document.createElement("span");
+        span.className = "word";
+        span.textContent = w.text;
+        bodyEl.appendChild(span);
+        spans.push({ span, offset: w.offset_ms, duration: w.duration_ms });
+        cursor = idx + w.text.length;
+      }
+      if (cursor < text.length) {
+        bodyEl.appendChild(document.createTextNode(text.slice(cursor)));
+      }
+
+      // Schedule highlight on each word from now. Small lead-time (60ms) so the
+      // visible cue arrives just before the audio. Mark spoken once duration passes.
+      const lead = 60;
+      const start = performance.now();
+      clearWordTimers();
+      for (const { span, offset, duration } of spans) {
+        const tOn = Math.max(0, offset - lead);
+        const tOff = offset + duration;
+        wordTimers.push(setTimeout(() => {
+          span.classList.add("active");
+        }, tOn));
+        wordTimers.push(setTimeout(() => {
+          span.classList.remove("active");
+          span.classList.add("spoken");
+        }, tOff));
       }
     }
 
@@ -484,7 +556,6 @@
       stateEl.textContent = data.state;
       labelEl.textContent = labels[data.state] || data.state;
 
-      // Snapshot transitions to history
       if (prev === "thinking" && data.state !== "thinking" && lastUserText) {
         pushHistory("you", lastUserText);
         lastUserText = null;
@@ -493,17 +564,27 @@
         pushHistory("shelby", lastShelbyText);
         lastShelbyText = null;
       }
+      // Leaving the speaking state means any scheduled highlights are stale.
+      if (prev === "speaking" && data.state !== "speaking") {
+        clearWordTimers();
+      }
 
-      // Track current
       if (data.state === "thinking") lastUserText = data.text;
       if (data.state === "speaking") lastShelbyText = data.text;
 
-      // Body fade
-      bodyEl.style.opacity = "0";
-      setTimeout(() => {
-        bodyEl.textContent = data.text || "";
+      if (data.state === "speaking" && Array.isArray(data.words) && data.words.length > 0) {
+        // Render and schedule highlights immediately, no fade — the fade would
+        // delay the visual highlights and break sync with audio.
         bodyEl.style.opacity = "1";
-      }, 200);
+        renderSpokenWords(data.text || "", data.words);
+      } else {
+        bodyEl.style.opacity = "0";
+        setTimeout(() => {
+          clearWordTimers();
+          renderPlain(data.text || "");
+          bodyEl.style.opacity = "1";
+        }, 200);
+      }
     }
 
     const evt = new EventSource("/events");
