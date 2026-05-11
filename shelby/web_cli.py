@@ -130,8 +130,14 @@ async def _stream_speak(brain: Brain, prompt: str) -> str:
             full_reply.append(chunk)
             chunk_text = chunk
 
-            async def _on_start(words):
-                publish("speaking", text=chunk_text, words=words, append=not first)
+            async def _on_start(words, levels):
+                publish(
+                    "speaking",
+                    text=chunk_text,
+                    words=words,
+                    levels=levels,
+                    append=not first,
+                )
 
             try:
                 await speak_async(chunk_text, on_start=_on_start)

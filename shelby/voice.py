@@ -53,7 +53,13 @@ def strip_markdown_for_speech(text: str) -> str:
 
 
 WordEvent = dict  # {"text": str, "offset_ms": float, "duration_ms": float}
-OnSpeakStart = Callable[[list[WordEvent]], Awaitable[None]]
+LevelEvent = dict  # {"offset_ms": float, "level": float}  level in [0, 1]
+OnSpeakStart = Callable[[list[WordEvent], list[LevelEvent]], Awaitable[None]]
+
+
+# RMS window for the audio amplitude envelope, in milliseconds. ~80ms gives
+# the bars enough granularity to feel alive without flooding SSE messages.
+_LEVEL_WINDOW_MS = 80
 
 
 SAMPLE_RATE = 16000
@@ -90,6 +96,8 @@ async def warmup_tts(
     first user-visible TTS chunk.
     """
     try:
+        # Discards the (pcm, sr, words, levels) tuple; we only need the
+        # network handshake side-effect.
         await _edge_tts_to_pcm(".", voice, rate)
     except Exception as exc:
         print(f"[tts warmup skipped: {exc}]", flush=True)
@@ -107,7 +115,33 @@ def transcribe(audio: np.ndarray) -> str:
     return " ".join(s.text.strip() for s in segments).strip()
 
 
-async def _edge_tts_to_pcm(text: str, voice: str, rate: str) -> tuple[np.ndarray, int, list[WordEvent]]:
+def _envelope(pcm: np.ndarray, sample_rate: int, window_ms: int = _LEVEL_WINDOW_MS) -> list[LevelEvent]:
+    """Compute an RMS amplitude envelope over the PCM, normalised to [0, 1].
+
+    Frames are spaced every `window_ms` and carry the RMS of that window.
+    The frontend uses these as bar-height targets synchronised to playback,
+    so the visual EQ actually tracks Shelby's voice instead of pure noise.
+    """
+    if pcm.size == 0:
+        return []
+    win = max(1, int(sample_rate * window_ms / 1000))
+    # Pad so the final window is complete.
+    n_windows = max(1, pcm.size // win)
+    trimmed = pcm[: n_windows * win]
+    blocks = trimmed.reshape(n_windows, win)
+    rms = np.sqrt(np.mean(blocks * blocks, axis=1) + 1e-12)
+    # Normalise: 0.18 RMS is roughly "loud speech" for edge-tts output,
+    # which we clamp to 1.0 so the bars hit ceiling on emphasised syllables.
+    levels = np.clip(rms / 0.18, 0.0, 1.0)
+    return [
+        {"offset_ms": i * window_ms, "level": float(levels[i])}
+        for i in range(n_windows)
+    ]
+
+
+async def _edge_tts_to_pcm(
+    text: str, voice: str, rate: str
+) -> tuple[np.ndarray, int, list[WordEvent], list[LevelEvent]]:
     communicate = edge_tts.Communicate(text, voice, rate=rate, boundary="WordBoundary")
     mp3_bytes = bytearray()
     words: list[WordEvent] = []
@@ -138,7 +172,8 @@ async def _edge_tts_to_pcm(text: str, voice: str, rate: str) -> tuple[np.ndarray
     elif pcm.max() > 1.0:
         pcm = pcm / 32768.0
 
-    return pcm, sample_rate, words
+    levels = _envelope(pcm, sample_rate)
+    return pcm, sample_rate, words, levels
 
 
 async def speak_async(
@@ -150,9 +185,9 @@ async def speak_async(
     if not text.strip():
         return
     try:
-        pcm, sr, words = await _edge_tts_to_pcm(text, voice, rate)
+        pcm, sr, words, levels = await _edge_tts_to_pcm(text, voice, rate)
         if on_start is not None:
-            await on_start(words)
+            await on_start(words, levels)
         sd.play(pcm, sr)
         sd.wait()
         return
@@ -160,7 +195,7 @@ async def speak_async(
         print(f"[edge-tts failed, falling back to SAPI: {exc}]", flush=True)
         if on_start is not None:
             try:
-                await on_start([])
+                await on_start([], [])
             except Exception:
                 pass
         _speak_sapi(text)

@@ -1341,6 +1341,13 @@
       if (data.state === "thinking") lastUserText = data.text;
       if (data.state === "speaking") lastShelbyText = data.text;
 
+      // Real audio envelope from the server: schedule per-chunk bar updates
+      // synced to playback. Each chunk arrives with its own offsets starting
+      // at 0, so we reset the schedule each time.
+      if (data.state === "speaking" && Array.isArray(data.levels) && data.levels.length > 0) {
+        scheduleEnvelope(data.levels);
+      }
+
       if (data.state === "speaking" && Array.isArray(data.words) && data.words.length > 0) {
         // Render and schedule highlights immediately, no fade — the fade would
         // delay the visual highlights and break sync with audio. Append flag
@@ -1364,18 +1371,56 @@
       }
     }
 
-    // Audio bars: randomised heights driven from JS during speaking state.
-    // This is a pragmatic stand-in for a true browser-side audio analyser:
-    // the audio plays from server speakers, so the browser can't directly
-    // sample it without WebRTC routing. Random heights at ~120ms intervals
-    // read as "alive and reactive" without needing a real signal.
+    // Audio bars. Two modes:
+    //   1. Envelope mode (preferred): we have an array of RMS levels from
+    //      the server keyed to playback offsets, so the bars track Shelby's
+    //      actual voice amplitude in sync with audio.
+    //   2. Random-EQ fallback: when no levels arrive (SAPI fallback path,
+    //      or a chunk before levels are scheduled), we noise the bars with
+    //      a centre-weighted distribution so they still look alive.
     const bars = document.querySelectorAll(".bar");
     let barsTimer = null;
+    let envelopeTimers = [];
+
+    function clearEnvelopeTimers() {
+      for (const t of envelopeTimers) clearTimeout(t);
+      envelopeTimers = [];
+    }
+
+    function paintBars(level) {
+      // level in [0, 1]. Each bar gets a smoothed random offset around the
+      // shared envelope target so neighbouring bars don't move in lockstep.
+      bars.forEach((bar, i) => {
+        const dist = Math.abs(i - (bars.length - 1) / 2);
+        const energy = 1 - dist / (bars.length / 2);
+        const jitter = 0.7 + Math.random() * 0.6;
+        const h = 6 + level * (12 + 28 * energy) * jitter;
+        bar.style.height = h.toFixed(1) + "px";
+      });
+    }
+
+    function scheduleEnvelope(levels) {
+      clearEnvelopeTimers();
+      if (!Array.isArray(levels) || levels.length === 0) return;
+      // Stop the random fallback loop once we have a real envelope.
+      if (barsTimer) { clearInterval(barsTimer); barsTimer = null; }
+      for (const ev of levels) {
+        envelopeTimers.push(setTimeout(() => paintBars(ev.level), ev.offset_ms));
+      }
+      // After the envelope finishes, settle bars back to flat.
+      const last = levels[levels.length - 1];
+      envelopeTimers.push(setTimeout(
+        () => paintBars(0),
+        (last.offset_ms || 0) + 200,
+      ));
+    }
+
     function startBars() {
+      // Fallback noise loop until the first envelope arrives (or for the
+      // SAPI fallback path where we never get levels).
       if (barsTimer) return;
       const tick = () => {
         bars.forEach((bar, i) => {
-          // Centre bars carry more energy than the edges, like a real EQ.
           const dist = Math.abs(i - (bars.length - 1) / 2);
           const energy = 1 - dist / (bars.length / 2);
           const h = 6 + Math.random() * (10 + 22 * energy);
@@ -1387,6 +1432,7 @@
     }
     function stopBars() {
       if (barsTimer) { clearInterval(barsTimer); barsTimer = null; }
+      clearEnvelopeTimers();
       bars.forEach(bar => { bar.style.height = ""; });
     }
 
