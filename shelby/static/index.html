@@ -270,6 +270,28 @@
       55% { transform: scale(0.98); }
       80% { transform: scale(1.03); }
     }
+    /* Follow-up countdown ring around the orb when she's waiting for your reply
+       without re-waking. Activated by adding the .followup class to body. */
+    .stage::after {
+      content: "";
+      position: absolute;
+      inset: -28px;
+      border-radius: 50%;
+      border: 2px solid var(--listen);
+      box-shadow: 0 0 16px var(--listen-glow);
+      opacity: 0;
+      transform: rotate(-90deg);
+      pointer-events: none;
+      clip-path: inset(0 50% 0 0);
+    }
+    body.followup .stage::after {
+      opacity: 0.85;
+      animation: followup-sweep 5s linear forwards;
+    }
+    @keyframes followup-sweep {
+      from { clip-path: inset(0 0 0 0); }
+      to   { clip-path: inset(0 100% 0 0); }
+    }
     /* Particle trail emanating from the orb during speak */
     .particles {
       position: absolute;
@@ -613,6 +635,18 @@
       // Leaving the speaking state means any scheduled highlights are stale.
       if (prev === "speaking" && data.state !== "speaking") {
         clearWordTimers();
+      }
+
+      // Follow-up countdown ring: triggered when speaking transitions to
+      // listening (the no-wake-needed conversational window). Restart by
+      // toggling the class so the CSS animation re-runs.
+      if (prev === "speaking" && data.state === "listening") {
+        document.body.classList.remove("followup");
+        // Force reflow so the animation restarts.
+        void document.body.offsetWidth;
+        document.body.classList.add("followup");
+      } else if (data.state !== "listening") {
+        document.body.classList.remove("followup");
       }
 
       if (data.state === "thinking") lastUserText = data.text;
