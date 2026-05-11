@@ -1,3 +1,5 @@
+import os
+
 import anyio
 
 from .ambient import get_wake_model, record_until_silence, wait_for_wake
@@ -16,6 +18,8 @@ async def _loop() -> None:
     get_wake_model()
     print("[ready, listening for 'hey jarvis']\n", flush=True)
 
+    follow_up_window_ms = int(os.environ.get("JARVIS_FOLLOWUP_MS", "5000"))
+
     async with Brain() as brain:
         try:
             while True:
@@ -23,18 +27,32 @@ async def _loop() -> None:
                 print("> wake detected, listening...", flush=True)
                 audio = record_until_silence()
 
-                if audio.size == 0:
-                    print("(no audio)", flush=True)
-                elif not (text := transcribe(audio)):
-                    print("(no speech detected)", flush=True)
-                else:
+                while True:
+                    if audio.size == 0:
+                        if audio is not None:
+                            print("(no audio)", flush=True)
+                        break
+
+                    text = transcribe(audio)
+                    if not text:
+                        print("(no speech detected)", flush=True)
+                        break
+
                     print(f"you> {text}", flush=True)
                     try:
                         reply = await brain.process(text)
-                        print(f"jarvis> {reply}", flush=True)
-                        await speak_async(reply)
                     except Exception as exc:
                         print(f"jarvis> [error: {exc}]", flush=True)
+                        break
+
+                    print(f"jarvis> {reply}", flush=True)
+                    await speak_async(reply)
+
+                    print(f"> listening for follow-up (no wake needed, {follow_up_window_ms // 1000}s)...", flush=True)
+                    audio = record_until_silence(max_pre_speech_ms=follow_up_window_ms)
+                    if audio.size == 0:
+                        print("(no follow-up)", flush=True)
+                        break
 
                 print("[listening for 'hey jarvis']\n", flush=True)
         except KeyboardInterrupt:

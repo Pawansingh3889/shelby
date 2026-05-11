@@ -21,7 +21,7 @@ WAKE_THRESHOLD = float(os.environ.get("JARVIS_WAKE_THRESHOLD", "0.5"))
 VAD_AGGRESSIVENESS = int(os.environ.get("JARVIS_VAD_AGGRESSIVENESS", "2"))
 VAD_FRAME_MS = 30
 VAD_FRAME_SAMPLES = (SAMPLE_RATE * VAD_FRAME_MS) // 1000
-SILENCE_HANG_MS = int(os.environ.get("JARVIS_SILENCE_HANG_MS", "800"))
+SILENCE_HANG_MS = int(os.environ.get("JARVIS_SILENCE_HANG_MS", "1500"))
 MAX_UTTERANCE_S = int(os.environ.get("JARVIS_MAX_UTTERANCE_S", "30"))
 MIN_UTTERANCE_S = float(os.environ.get("JARVIS_MIN_UTTERANCE_S", "0.4"))
 
@@ -62,8 +62,9 @@ def wait_for_wake() -> None:
                     return
 
 
-def record_until_silence() -> np.ndarray:
+def record_until_silence(max_pre_speech_ms: Optional[int] = None) -> np.ndarray:
     vad = webrtcvad.Vad(VAD_AGGRESSIVENESS)
+    pre_speech_cap_ms = max_pre_speech_ms if max_pre_speech_ms is not None else MAX_UTTERANCE_S * 1000
 
     frames: list[np.ndarray] = []
     silence_ms = 0
@@ -105,6 +106,8 @@ def record_until_silence() -> np.ndarray:
                     break
             if elapsed_ms / 1000 >= MAX_UTTERANCE_S:
                 break
+            if not voice_seen and elapsed_ms >= pre_speech_cap_ms:
+                return np.zeros(0, dtype=DTYPE)
 
     if not frames:
         return np.zeros(0, dtype=DTYPE)
