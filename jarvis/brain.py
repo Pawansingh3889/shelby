@@ -54,6 +54,63 @@ async def weather(args):
 
 
 @tool(
+    "forecast",
+    "Hourly weather forecast plus sunrise and sunset for a location, today and tomorrow. "
+    "Use this when Captain is going somewhere outdoors and needs to plan: hill walking, "
+    "climbing, cycling, cricket, beach, anything weather-sensitive. Pass the destination as "
+    "a string, e.g. 'Hathersage', 'Stanage Edge', 'Snowdon', 'London'.",
+    {"location": str, "hours": int},
+)
+async def forecast(args):
+    location = (args.get("location") or DEFAULT_LOCATION).strip()
+    hours = max(6, min(int(args.get("hours") or 14), 36))
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        geo = await client.get(
+            "https://geocoding-api.open-meteo.com/v1/search",
+            params={"name": location, "count": 1, "language": "en", "format": "json"},
+        )
+        gdata = geo.json()
+        if not gdata.get("results"):
+            return {"content": [{"type": "text", "text": f"location '{location}' not found"}]}
+
+        loc = gdata["results"][0]
+        lat, lon = loc["latitude"], loc["longitude"]
+        name = loc.get("name", location)
+        admin = loc.get("admin1", "")
+        country = loc.get("country", "")
+
+        fc = await client.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": lat,
+                "longitude": lon,
+                "hourly": "temperature_2m,weather_code,precipitation_probability,wind_speed_10m,wind_gusts_10m",
+                "daily": "sunrise,sunset",
+                "timezone": "auto",
+                "forecast_days": 2,
+            },
+        )
+        fd = fc.json()
+
+    times = fd["hourly"]["time"][:hours]
+    temps = fd["hourly"]["temperature_2m"][:hours]
+    rain = fd["hourly"]["precipitation_probability"][:hours]
+    wind = fd["hourly"]["wind_speed_10m"][:hours]
+    gusts = fd["hourly"]["wind_gusts_10m"][:hours]
+
+    sunrise = fd["daily"]["sunrise"][0].split("T")[1]
+    sunset = fd["daily"]["sunset"][0].split("T")[1]
+
+    place = ", ".join(p for p in [name, admin, country] if p)
+    lines = [f"{place}", f"Sunrise {sunrise}, sunset {sunset}", "Hourly:"]
+    for t, te, r, w, g in zip(times, temps, rain, wind, gusts):
+        time_str = t.split("T")[1][:5]
+        lines.append(f"  {time_str}  {te}°C  rain {r}%  wind {w} km/h (gust {g})")
+    return {"content": [{"type": "text", "text": "\n".join(lines)}]}
+
+
+@tool(
     "news_headlines",
     "Get the top N general news headlines from BBC News. Pass count to limit, default 5.",
     {"count": int},
@@ -162,7 +219,7 @@ class Brain:
         local = create_sdk_mcp_server(
             name="jarvis-tools",
             version="0.1.0",
-            tools=[current_time, system_info, weather, news_headlines, github_pending],
+            tools=[current_time, system_info, weather, forecast, news_headlines, github_pending],
         )
         servers = {"jarvis": local}
         if extra_mcp_servers:
@@ -175,6 +232,7 @@ class Brain:
                 "mcp__jarvis__current_time",
                 "mcp__jarvis__system_info",
                 "mcp__jarvis__weather",
+                "mcp__jarvis__forecast",
                 "mcp__jarvis__news_headlines",
                 "mcp__jarvis__github_pending",
                 "mcp__claude_ai_Gmail__search_threads",
