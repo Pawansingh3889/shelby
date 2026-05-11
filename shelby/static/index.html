@@ -51,6 +51,27 @@
       );
       transition: background 1200ms ease;
     }
+    /* Hexagonal grid overlay: thin SVG hex tile repeating across the
+       viewport, low alpha. Signature Iron Man HUD ambient pattern.
+       Drifts very slowly to suggest a live grid being projected. */
+    .hexgrid {
+      position: fixed;
+      inset: -10vh -10vw;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.10;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='56' height='48.5'><path d='M14 0 L42 0 L56 24.25 L42 48.5 L14 48.5 L0 24.25 Z' fill='none' stroke='%2322d3ee' stroke-width='0.6'/></svg>");
+      background-size: 56px 48.5px;
+      animation: hex-drift 80s linear infinite;
+      transition: opacity 800ms ease;
+    }
+    body[data-state="listening"] .hexgrid { opacity: 0.18; }
+    body[data-state="thinking"]  .hexgrid { opacity: 0.14; }
+    body[data-state="speaking"]  .hexgrid { opacity: 0.16; }
+    @keyframes hex-drift {
+      from { background-position: 0 0; }
+      to   { background-position: 56px 97px; }
+    }
     /* Animated starfield */
     .stars {
       position: fixed;
@@ -839,6 +860,7 @@
   </style>
 </head>
 <body data-state="idle">
+  <div class="hexgrid"></div>
   <div class="stars" id="stars"></div>
   <div class="flare tl"></div>
   <div class="flare br"></div>
