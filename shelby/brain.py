@@ -389,6 +389,13 @@ SYSTEM_PROMPT = (
     "matching tool rather than guessing. For single-tool questions, skip the acknowledgement "
     "and just answer. Never narrate what you are about to do for trivial replies, just answer.\n"
     "\n"
+    "SQL TOOLS (if registered via SHELBY_MCP_SERVERS) — when Captain asks about "
+    "data, queries, tables, rows or to 'lint this SQL', use the sql-explorer or "
+    "sql-sop tools. Read-only queries only via sql-explorer. Always summarise "
+    "results conversationally (e.g. 'Captain, we shipped 247 orders yesterday, "
+    "up 12 from the day before') rather than dumping raw rows. Cap any "
+    "list-read-out at 3 items.\n"
+    "\n"
     "SYSTEM CONTROL — when Captain says 'open X', 'launch X', 'pull up X':\n"
     "1. If X is an application (Chrome, notepad, terminal, Spotify, VS Code, "
     "task manager, etc.), call open_application(name=X).\n"
@@ -447,6 +454,37 @@ class ClaudeBrain:
             ],
         )
         servers = {"shelby": local}
+
+        # External MCP servers via SHELBY_MCP_SERVERS env var:
+        # comma-separated "name=command [arg ...]" entries. Examples:
+        #   SHELBY_MCP_SERVERS=sql-sop=sql-sop-mcp,sql-explorer=sql-explorer-mcp
+        # The SDK runs each as a stdio child process. setting_sources=["user"]
+        # also pulls in anything already configured in claude.ai settings, so
+        # this env var is the second registration path for servers Captain
+        # wants attached to Shelby specifically.
+        external_spec = os.environ.get("SHELBY_MCP_SERVERS", "").strip()
+        external_allowed: list[str] = []
+        if external_spec:
+            for entry in external_spec.split(","):
+                entry = entry.strip()
+                if not entry or "=" not in entry:
+                    continue
+                name, command_line = entry.split("=", 1)
+                name = name.strip()
+                parts = command_line.strip().split()
+                if not parts:
+                    continue
+                servers[name] = {
+                    "type": "stdio",
+                    "command": parts[0],
+                    "args": parts[1:],
+                }
+                # Allow all tools from this server. Specific names land at
+                # mcp__<name>__<tool> but we don't know them in advance, so
+                # we authorise the wildcard prefix.
+                external_allowed.append(f"mcp__{name}__*")
+                print(f"[mcp] registering external server '{name}' -> {parts[0]}", flush=True)
+
         if extra_mcp_servers:
             servers.update(extra_mcp_servers)
 
@@ -471,6 +509,7 @@ class ClaudeBrain:
                 "mcp__claude_ai_Google_Calendar__list_calendars",
                 "WebSearch",
                 "WebFetch",
+                *external_allowed,
             ],
             disallowed_tools=["Bash", "Edit", "Write", "Read"],
             system_prompt=SYSTEM_PROMPT,
