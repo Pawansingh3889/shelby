@@ -44,7 +44,7 @@ try:
 except ImportError:  # pragma: no cover
     StreamEvent = None  # type: ignore
 
-from . import memory, syscontrol, timers
+from . import memory, skills as skills_loader, syscontrol, timers
 
 
 GITHUB_USERNAME = os.environ.get("SHELBY_GITHUB_USERNAME", "Pawansingh3889")
@@ -443,6 +443,18 @@ class ClaudeBrain:
         os.environ.pop("ANTHROPIC_API_KEY", None)
         os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
 
+        # Discover OpenClaw-style skills from ~/.shelby/skills (or
+        # SHELBY_SKILLS_DIR). Each one becomes a callable tool whose
+        # invocation returns its instructions for the model to follow.
+        discovered_skills = skills_loader.discover()
+        skill_tools = skills_loader.make_skill_tools(discovered_skills)
+        if discovered_skills:
+            print(
+                f"[skills] loaded {len(discovered_skills)} skill(s): "
+                + ", ".join(s.tool_name for s in discovered_skills),
+                flush=True,
+            )
+
         local = create_sdk_mcp_server(
             name="shelby-tools",
             version="0.1.0",
@@ -451,6 +463,7 @@ class ClaudeBrain:
                 news_headlines, github_pending,
                 set_timer, list_timers, cancel_timer,
                 open_application, open_url_tool,
+                *skill_tools,
             ],
         )
         servers = {"shelby": local}
@@ -491,11 +504,14 @@ class ClaudeBrain:
         # Prepend rolling cross-session memory so the model has continuity.
         # Empty string if there's no history yet (first run).
         memory_preamble = memory.format_for_prompt()
-        system_prompt = (
-            (memory_preamble + "\n\n" + SYSTEM_PROMPT)
-            if memory_preamble
-            else SYSTEM_PROMPT
-        )
+        skills_snippet = skills_loader.system_prompt_snippet(discovered_skills)
+        prompt_parts = []
+        if memory_preamble:
+            prompt_parts.append(memory_preamble)
+        if skills_snippet:
+            prompt_parts.append(skills_snippet)
+        prompt_parts.append(SYSTEM_PROMPT)
+        system_prompt = "\n\n".join(prompt_parts)
 
         cli_path = _detect_system_claude_cli()
         self._options = ClaudeAgentOptions(
@@ -512,6 +528,10 @@ class ClaudeBrain:
                 "mcp__shelby__cancel_timer",
                 "mcp__shelby__open_application",
                 "mcp__shelby__open_url",
+                # Skill tools live on the shelby server too with a
+                # "skill_" prefix; allow the wildcard so any discovered
+                # skill is callable without explicit registration.
+                "mcp__shelby__skill_*",
                 "mcp__claude_ai_Gmail__search_threads",
                 "mcp__claude_ai_Gmail__get_thread",
                 "mcp__claude_ai_Google_Calendar__list_events",
