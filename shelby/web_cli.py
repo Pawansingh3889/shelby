@@ -13,7 +13,7 @@ from typing import Optional
 
 from .ambient import get_wake_model, record_until_silence, wait_for_wake
 from .brain_hybrid import HybridBrain
-from . import memory, timers
+from . import memory, telegram_bridge, timers
 from .voice import speak_async, strip_markdown_for_speech, transcribe, warmup_stt, warmup_tts
 from .web import app, publish
 
@@ -224,6 +224,20 @@ async def _loop() -> None:
             await _announce_timer(t, brain)
         timer_task = asyncio.create_task(timers.watch_loop(_fire))
 
+        # Optional Telegram bridge for remote text-based access. Only
+        # spins up if SHELBY_TELEGRAM_TOKEN + CHAT_ID are set, otherwise
+        # this is a no-op (no token == no bot).
+        telegram_task: Optional[asyncio.Task] = None
+        if telegram_bridge.is_configured():
+            async def _telegram_process(text: str) -> str:
+                try:
+                    return await _stream_speak(brain, text)
+                except Exception as exc:
+                    return f"error: {exc}"
+            telegram_task = asyncio.create_task(
+                telegram_bridge.run_bridge(_telegram_process)
+            )
+
         def pub(state: str, **kwargs):
             """Publish with the current brain's mode + persona auto-attached
             so the frontend always knows which assistant is talking."""
@@ -289,6 +303,8 @@ async def _loop() -> None:
             print("\n[shutting down]")
         finally:
             timer_task.cancel()
+            if telegram_task is not None:
+                telegram_task.cancel()
 
 
 def run() -> None:
