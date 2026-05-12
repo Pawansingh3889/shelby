@@ -23,6 +23,7 @@ shelby = "shelby.cli:run"
 shelby-voice = "shelby.voice_cli:run"
 shelby-ambient = "shelby.ambient_cli:run"
 shelby-demo = "shelby.web_cli:run"
+shelby-memory = "shelby.memory_cli:main"
 
 [build-system]
 requires = ["hatchling"]
