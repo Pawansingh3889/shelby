@@ -44,7 +44,7 @@ try:
 except ImportError:  # pragma: no cover
     StreamEvent = None  # type: ignore
 
-from . import syscontrol, timers
+from . import memory, syscontrol, timers
 
 
 GITHUB_USERNAME = os.environ.get("SHELBY_GITHUB_USERNAME", "Pawansingh3889")
@@ -488,6 +488,15 @@ class ClaudeBrain:
         if extra_mcp_servers:
             servers.update(extra_mcp_servers)
 
+        # Prepend rolling cross-session memory so the model has continuity.
+        # Empty string if there's no history yet (first run).
+        memory_preamble = memory.format_for_prompt()
+        system_prompt = (
+            (memory_preamble + "\n\n" + SYSTEM_PROMPT)
+            if memory_preamble
+            else SYSTEM_PROMPT
+        )
+
         cli_path = _detect_system_claude_cli()
         self._options = ClaudeAgentOptions(
             mcp_servers=servers,
@@ -512,7 +521,7 @@ class ClaudeBrain:
                 *external_allowed,
             ],
             disallowed_tools=["Bash", "Edit", "Write", "Read"],
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             cli_path=cli_path,
             setting_sources=["user"],
             include_partial_messages=True,

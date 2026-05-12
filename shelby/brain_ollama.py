@@ -24,6 +24,8 @@ from typing import AsyncIterator, Optional
 
 import httpx
 
+from . import memory
+
 
 OLLAMA_HOST = os.environ.get("SHELBY_OLLAMA_HOST", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.environ.get("SHELBY_OLLAMA_MODEL", "llama3.2")
@@ -97,7 +99,11 @@ class OllamaBrain:
         if self._client is None:
             raise RuntimeError("OllamaBrain must be used as an async context manager")
 
-        system = JARVIS_PROMPT + "\n" + self._current_context()
+        preamble = memory.format_for_prompt(n=10)  # smaller window for local model
+        system_parts = [JARVIS_PROMPT, self._current_context()]
+        if preamble:
+            system_parts.append(preamble)
+        system = "\n".join(system_parts)
         payload = {
             "model": self.model,
             "stream": True,

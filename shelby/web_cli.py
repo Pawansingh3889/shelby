@@ -13,7 +13,7 @@ from typing import Optional
 
 from .ambient import get_wake_model, record_until_silence, wait_for_wake
 from .brain_hybrid import HybridBrain
-from . import timers
+from . import memory, timers
 from .voice import speak_async, strip_markdown_for_speech, transcribe, warmup_stt, warmup_tts
 from .web import app, publish
 
@@ -264,6 +264,13 @@ async def _loop() -> None:
                         break
 
                     print(f"shelby> {reply}", flush=True)
+
+                    # Record this round-trip into cross-session memory so the
+                    # next boot's system prompt can carry context forward.
+                    try:
+                        memory.append_turn(text, reply)
+                    except Exception as exc:
+                        print(f"[memory write failed: {exc}]", flush=True)
 
                     pub("listening", text="follow-up?")
                     audio = await asyncio.to_thread(
