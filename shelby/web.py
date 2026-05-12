@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from pathlib import Path
 from typing import Optional
@@ -83,6 +84,58 @@ async def _wake(request):
     return Response(status_code=204)
 
 
+async def _health(request):
+    """Lightweight health probe for monitoring / restart loops.
+    Returns 200 with a tiny JSON body. Doesn't touch the brain or speech
+    pipeline so it stays fast even when Shelby is busy."""
+    return JSONResponse({"status": "ok", "uptime_s": int(time.monotonic() - _BOOT_AT)})
+
+
+async def _version(request):
+    """Build metadata: package version + git commit if available.
+    Used by the frontend HUD and by anyone curling the server."""
+    version = "unknown"
+    try:
+        from importlib.metadata import version as _v
+        version = _v("shelby")
+    except Exception:
+        pass
+    commit = ""
+    try:
+        import subprocess
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=Path(__file__).parent.parent,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except Exception:
+        pass
+    return JSONResponse({"version": version, "commit": commit})
+
+
+async def _info(request):
+    """Snapshot of what Shelby has loaded right now: discovered skills,
+    configured external MCP servers, current mode, etc. Handy for
+    debugging 'why isn't my skill being called'."""
+    from . import skills as skills_loader
+    discovered = skills_loader.discover()
+    info = {
+        "skills": [
+            {"slug": s.slug, "name": s.name, "triggers": s.triggers}
+            for s in discovered
+        ],
+        "external_mcp_servers": [
+            entry.split("=", 1)[0].strip()
+            for entry in os.environ.get("SHELBY_MCP_SERVERS", "").split(",")
+            if "=" in entry
+        ],
+        "telegram_bridge": bool(os.environ.get("SHELBY_TELEGRAM_TOKEN")),
+        "force_mode": os.environ.get("SHELBY_FORCE_MODE") or None,
+    }
+    return JSONResponse(info)
+
+
 async def _stats(request):
     """Live system stats for the HUD right panel.
 
@@ -136,6 +189,9 @@ app = Starlette(
         Route("/events", _events),
         Route("/wake", _wake, methods=["POST"]),
         Route("/stats", _stats),
+        Route("/health", _health),
+        Route("/version", _version),
+        Route("/info", _info),
         Route("/manifest.webmanifest", _manifest),
         Route("/icon.svg", _icon),
     ]
