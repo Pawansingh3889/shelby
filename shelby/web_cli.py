@@ -11,6 +11,7 @@ import anyio
 import uvicorn
 from typing import Optional
 
+from . import settings as _settings  # noqa: F401 — side-effect: loads settings.json
 from .ambient import get_wake_model, record_until_silence, wait_for_wake
 from .brain_hybrid import HybridBrain
 from . import memory, telegram_bridge, timers
