@@ -281,6 +281,56 @@ async def cancel_timer(args):
 
 
 @tool(
+    "search_memory",
+    "Search Shelby's cross-session conversation memory for past mentions "
+    "of a topic. Use this when Captain says 'what did I tell you about X', "
+    "'remember when we talked about X', or 'have we discussed X'. Returns "
+    "the matching turns with timestamps so you can give a grounded answer.",
+    {"query": str, "limit": int},
+)
+async def search_memory(args):
+    query = (args.get("query") or "").strip().lower()
+    limit = max(1, min(int(args.get("limit") or 5), 20))
+    if not query:
+        return {"content": [{"type": "text", "text": "no query provided"}]}
+    # Search the full memory file, not just the recent window.
+    all_turns = memory.load_recent(n=memory.MAX_LINES)
+    hits = []
+    for t in all_turns:
+        haystack = (t.get("user", "") + " " + t.get("assistant", "")).lower()
+        if query in haystack:
+            hits.append(t)
+    if not hits:
+        return {"content": [{"type": "text", "text": f"no memory mentions '{query}'"}]}
+    hits = hits[-limit:]
+    lines = [f"found {len(hits)} mention(s) of '{query}':"]
+    from datetime import datetime as _dt
+    for t in hits:
+        when = _dt.fromtimestamp(t.get("ts", 0)).strftime("%Y-%m-%d %H:%M")
+        u = (t.get("user") or "")[:120]
+        a = (t.get("assistant") or "")[:200]
+        lines.append(f"[{when}] you said: {u}")
+        if a:
+            lines.append(f"  I replied: {a}")
+    return {"content": [{"type": "text", "text": "\n".join(lines)}]}
+
+
+@tool(
+    "clear_memory",
+    "Wipe Shelby's cross-session memory entirely. Use this only when "
+    "Captain explicitly asks to 'forget everything', 'wipe your memory', "
+    "'start fresh', etc. Confirm what was cleared in your spoken reply.",
+    {},
+)
+async def clear_memory_tool(args):
+    before = len(memory.load_recent(n=memory.MAX_LINES))
+    memory.clear()
+    return {"content": [{"type": "text", "text":
+        f"cleared {before} stored turn(s) from memory"
+    }]}
+
+
+@tool(
     "morning_brief",
     "Read today's Gmail digest from the morning-brief CLI tool "
     "(https://pypi.org/project/morning-brief/). Returns the markdown "
@@ -524,6 +574,7 @@ class ClaudeBrain:
                 current_time, system_info, weather, forecast,
                 news_headlines, github_pending,
                 set_timer, list_timers, cancel_timer,
+                search_memory, clear_memory_tool,
                 morning_brief_digest,
                 open_application, open_url_tool,
                 *skill_tools,
@@ -589,6 +640,8 @@ class ClaudeBrain:
                 "mcp__shelby__set_timer",
                 "mcp__shelby__list_timers",
                 "mcp__shelby__cancel_timer",
+                "mcp__shelby__search_memory",
+                "mcp__shelby__clear_memory",
                 "mcp__shelby__morning_brief",
                 "mcp__shelby__open_application",
                 "mcp__shelby__open_url",
