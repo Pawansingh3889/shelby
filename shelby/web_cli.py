@@ -48,6 +48,8 @@ _TOOL_LABELS = {
     "open_application": "Launching app",
     "open_url": "Opening link",
     "open_url_tool": "Opening link",
+    "morning_brief": "Pulling morning brief",
+    "morning_brief_digest": "Pulling morning brief",
     "search_threads": "Sweeping inbox",
     "get_thread": "Reading email",
     "list_events": "Checking calendar",

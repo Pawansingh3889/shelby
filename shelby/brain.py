@@ -281,6 +281,66 @@ async def cancel_timer(args):
 
 
 @tool(
+    "morning_brief",
+    "Read today's Gmail digest from the morning-brief CLI tool "
+    "(https://pypi.org/project/morning-brief/). Returns the markdown "
+    "digest of unread inbox threads with priority scoring and 'why' "
+    "annotations. Captain installs it separately with `pip install "
+    "morning-brief` and runs `morning-brief run` to refresh, but the "
+    "digest is also generated lazily here if today's file is missing. "
+    "Use this when Captain asks 'what's in my inbox', 'morning brief', "
+    "or as a richer email source than the live Gmail tools.",
+    {"force_refresh": bool},
+)
+async def morning_brief_digest(args):
+    import asyncio
+    from datetime import date
+
+    force = bool(args.get("force_refresh"))
+    home = Path.home()
+    digest_dir = home / ".morning-brief" / "digests"
+    today = date.today().strftime("%Y-%m-%d")
+    digest_file = digest_dir / f"{today}.md"
+
+    if force or not digest_file.exists():
+        # Best-effort lazy refresh. Captain may not have the tool installed;
+        # we fall back to reporting the situation rather than crashing.
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "morning-brief", "run",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await asyncio.wait_for(proc.communicate(), timeout=60)
+        except FileNotFoundError:
+            return {"content": [{"type": "text", "text":
+                "morning-brief CLI is not installed. Install it with "
+                "'pip install morning-brief' and run 'morning-brief init' "
+                "to set up Gmail credentials, then ask me again."
+            }]}
+        except (asyncio.TimeoutError, Exception) as exc:
+            return {"content": [{"type": "text", "text":
+                f"morning-brief refresh failed: {exc}. "
+                "Try running 'morning-brief run' manually."
+            }]}
+
+    if not digest_file.exists():
+        return {"content": [{"type": "text", "text":
+            "No digest available for today. Run 'morning-brief run' to "
+            "generate one, then ask me again."
+        }]}
+
+    try:
+        text = digest_file.read_text(encoding="utf-8")
+    except OSError as exc:
+        return {"content": [{"type": "text", "text": f"could not read digest: {exc}"}]}
+    # Bound the returned text so the model doesn't choke on a massive digest.
+    if len(text) > 8000:
+        text = text[:8000] + "\n\n[digest truncated]"
+    return {"content": [{"type": "text", "text": text}]}
+
+
+@tool(
     "open_application",
     "Launch a desktop application on this computer. Use the friendly app "
     "name Captain said. Known shortcuts include notepad, calculator, "
@@ -359,9 +419,11 @@ SYSTEM_PROMPT = (
     "1. Speak a one-sentence acknowledgement first, e.g. 'On it Captain, pulling your "
     "briefing now.' Vary the wording.\n"
     "2. In a SINGLE turn after that acknowledgement, call IN PARALLEL: current_time, "
-    "weather, news_headlines (count 3 to 5), github_pending, and Gmail search_threads "
-    "(query 'is:unread in:inbox category:primary newer_than:2d', pageSize 10). Skip "
-    "Google_Calendar for now. All five tool_use blocks belong in the same assistant message.\n"
+    "weather, news_headlines (count 3 to 5), github_pending, morning_brief, and Gmail "
+    "search_threads (query 'is:unread in:inbox category:primary newer_than:2d', "
+    "pageSize 10). Skip Google_Calendar for now. All tool_use blocks belong in the same "
+    "assistant message. morning_brief returns a richer pre-classified inbox digest; "
+    "prefer its summary over the raw Gmail thread list when both are available.\n"
     "3. Once results return, open the briefing with a time-of-day greeting, then summarise: "
     "today's date and time, weather, top news, pending GitHub work, pending email count plus "
     "1-2 most important subjects. Skip Gmail messages that are obviously marketing or "
@@ -462,6 +524,7 @@ class ClaudeBrain:
                 current_time, system_info, weather, forecast,
                 news_headlines, github_pending,
                 set_timer, list_timers, cancel_timer,
+                morning_brief_digest,
                 open_application, open_url_tool,
                 *skill_tools,
             ],
@@ -526,6 +589,7 @@ class ClaudeBrain:
                 "mcp__shelby__set_timer",
                 "mcp__shelby__list_timers",
                 "mcp__shelby__cancel_timer",
+                "mcp__shelby__morning_brief",
                 "mcp__shelby__open_application",
                 "mcp__shelby__open_url",
                 # Skill tools live on the shelby server too with a
