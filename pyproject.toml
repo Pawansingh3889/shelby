@@ -34,3 +34,7 @@ packages = ["shelby"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "shelby/static" = "shelby/static"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
