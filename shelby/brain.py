@@ -44,7 +44,7 @@ try:
 except ImportError:  # pragma: no cover
     StreamEvent = None  # type: ignore
 
-from . import memory, skills as skills_loader, syscontrol, timers
+from . import jobs as jobs_lib, memory, skills as skills_loader, syscontrol, timers
 
 
 GITHUB_USERNAME = os.environ.get("SHELBY_GITHUB_USERNAME", "Pawansingh3889")
@@ -391,6 +391,49 @@ async def morning_brief_digest(args):
 
 
 @tool(
+    "job_pipeline",
+    "Run or read Captain's job-digest pipeline (a separate checkout, "
+    "https://github.com/Pawansingh3889/job-digest). It pulls postings from "
+    "job-board APIs, harvests the job-alert emails LinkedIn and Indeed send, "
+    "scores everything against Captain's profile (sponsor register, salary "
+    "floor, junior-first), and tracks the application funnel. refresh=false "
+    "just reads the current state and is fast; refresh=true reruns the whole "
+    "fetch first and can take a minute. This tool never submits an "
+    "application; the submit click stays with Captain.",
+    {"refresh": bool},
+)
+async def job_pipeline(args):
+    import asyncio
+    import sys as _sys
+
+    digest_dir = jobs_lib.find_digest_dir()
+    if digest_dir is None:
+        return {"content": [{"type": "text", "text":
+            "I can't find the job-digest checkout. Clone "
+            "https://github.com/Pawansingh3889/job-digest and set "
+            "SHELBY_JOBDIGEST_DIR to its path, then ask me again."
+        }]}
+    if args.get("refresh"):
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                _sys.executable, str(digest_dir / "digest.py"), "--quiet",
+                cwd=str(digest_dir),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await asyncio.wait_for(proc.communicate(), timeout=240)
+        except (asyncio.TimeoutError, OSError) as exc:
+            state = jobs_lib.read_state(digest_dir)
+            return {"content": [{"type": "text", "text":
+                f"pipeline refresh failed: {exc}. Reading the last recorded "
+                f"state instead.\n\n{state}"}]}
+    text = jobs_lib.read_state(digest_dir)
+    if len(text) > 8000:
+        text = text[:8000] + "\n[truncated]"
+    return {"content": [{"type": "text", "text": text}]}
+
+
+@tool(
     "open_application",
     "Launch a desktop application on this computer. Use the friendly app "
     "name Captain said. Known shortcuts include notepad, calculator, "
@@ -508,6 +551,18 @@ SYSTEM_PROMPT = (
     "up 12 from the day before') rather than dumping raw rows. Cap any "
     "list-read-out at 3 items.\n"
     "\n"
+    "JOB HUNT INTENT — when Captain asks about jobs, new roles, the job digest, "
+    "applications or the funnel:\n"
+    "1. Call job_pipeline with refresh=false. Only use refresh=true when Captain "
+    "explicitly says to run, refresh or rerun the pipeline; speak a one-sentence "
+    "acknowledgement first because a refresh takes about a minute.\n"
+    "2. Summarise spoken: how many roles are open and how many came from alert "
+    "emails, the top 2 or 3 by score with company names, one line on the funnel "
+    "and anything that moved today. Cap any list read-out at 3 items.\n"
+    "3. Never offer to submit an application; the submit click is Captain's. For "
+    "a role he likes, point him at 'python apply.py run N' in the job-digest "
+    "checkout.\n"
+    "\n"
     "SYSTEM CONTROL — when Captain says 'open X', 'launch X', 'pull up X':\n"
     "1. If X is an application (Chrome, notepad, terminal, Spotify, VS Code, "
     "task manager, etc.), call open_application(name=X).\n"
@@ -575,7 +630,7 @@ class ClaudeBrain:
                 news_headlines, github_pending,
                 set_timer, list_timers, cancel_timer,
                 search_memory, clear_memory_tool,
-                morning_brief_digest,
+                morning_brief_digest, job_pipeline,
                 open_application, open_url_tool,
                 *skill_tools,
             ],

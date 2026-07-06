@@ -60,6 +60,7 @@ module owns, and where to look when something breaks.
 | `skills.py` | OpenClaw-compatible loader: `~/.shelby/skills/*/skill.md` → MCP tools |
 | `timers.py` | In-memory timer store + `watch_loop` coroutine |
 | `syscontrol.py` | `open_app` (curated allowlist + shell fallback) + `open_url` (scheme-restricted) |
+| `jobs.py` | `job_pipeline` bridge: runs/reads a job-digest checkout (job boards + job-alert emails + funnel); never submits an application |
 | `settings.py` | Loads `~/.shelby/settings.json` into env vars at boot (defaults, env wins) |
 | `telegram_bridge.py` | Optional Hermes-style text bridge for chatting with Shelby from your phone |
 | `web.py` | Starlette app: SSE, stats, health, version, info, manifest, icon |

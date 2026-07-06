@@ -298,6 +298,7 @@ shelby/
 │   ├── memory.py           # cross-session jsonl store
 │   ├── settings.py         # settings.json → env var promotion
 │   ├── skills.py           # OpenClaw skill loader
+│   ├── jobs.py             # job-digest pipeline bridge
 │   ├── timers.py           # in-memory timer store
 │   ├── syscontrol.py       # open_app / open_url tools
 │   ├── telegram_bridge.py  # optional Telegram bot
